@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Junk</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="window">
+
+    <!-- Drag region — grab anywhere on the top bar to move the window -->
+    <div class="titlebar" id="titlebar">
+      <span class="label">junk</span>
+      <button class="close-btn" id="closeBtn" title="Close (Esc)">×</button>
+    </div>
+
+    <!-- The scratchpad -->
+    <textarea
+      id="pad"
+      class="pad"
+      placeholder="Start typing… or paste anything."
+      spellcheck="false"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+    ></textarea>
+
+    <!-- Footer hint -->
+    <div class="footer">
+      <span class="hint"><kbd>⌘J</kbd> toggle &nbsp;·&nbsp; <kbd>Esc</kbd> close &nbsp;·&nbsp; content auto-saved</span>
+    </div>
+
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
