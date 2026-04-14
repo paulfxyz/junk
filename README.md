@@ -9,7 +9,7 @@
   a global-hotkey scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-1.6.0-5b5bf6?style=flat-square)](https://github.com/paulfleury/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.0.0-5b5bf6?style=flat-square)](https://github.com/paulfleury/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-10.15%2B-black?style=flat-square&logo=apple)](https://github.com/paulfleury/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2B-0078d4?style=flat-square&logo=windows)](https://github.com/paulfleury/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfleury/junk/releases)
