@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend
+  Junk — frontend (v2.3.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -11,7 +11,7 @@
     binary embeds it at compile time; there is no web server.
 
   Styling strategy: CSS custom properties + a single @keyframes block.
-    No CSS framework — the entire visual surface is ~120 lines. Using a
+    No CSS framework — the entire visual surface is ~180 lines. Using a
     framework (Tailwind, etc.) would introduce a build step and dozens of
     kilobytes of unused rules.
 
@@ -25,6 +25,15 @@
     No IPC is needed for persistence — the WebView's localStorage survives
     window hide/show because we never destroy the window; we only hide it.
 
+  Preferences panel (v2.3.0):
+    An in-window sheet that slides up from the bottom. Triggered by:
+      a) ⌘, / Ctrl+,  global shortcut (Rust → emits 'open-prefs' event)
+      b) invoke('open_prefs')  IPC command (same path)
+    Settings:
+      - Launch at login: uses tauri-plugin-autostart IPC (get_prefs / set_launch_at_login)
+      - Auto-check for updates: stored in localStorage; JS does the GitHub fetch
+    Credits section explains how to truly quit (Activity Monitor).
+
   Why not IndexedDB?
     For a scratchpad holding a few KB of text, localStorage is simpler, faster,
     and synchronous. IndexedDB's async API would add complexity for no benefit.
@@ -36,7 +45,7 @@
   <title>Junk</title>
 
   <!--
-    Space Grotesk — the typeface used in both the Electron and Rust versions.
+    Space Grotesk — the typeface used throughout Junk.
     We load only the weights we actually use (400 and 500) to minimise network
     overhead during development. In production the font is fetched once and
     cached by the WebView.
@@ -49,7 +58,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
     rel="stylesheet"
   />
 
@@ -96,6 +105,18 @@
       to {
         opacity: 1;
         transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Prefs panel slide-up */
+    @keyframes prefs-in {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
       }
     }
 
@@ -231,18 +252,13 @@
        Single-line hint bar at the bottom of the window. Uses a subtle
        top border to visually separate it from the textarea without the
        heaviness of a full divider line.
-
-       -webkit-app-region: no-drag is inherited from the .window override
-       NOT being applied here — actually we DO want the footer draggable
-       so users can drag the window by its footer. Only #editor gets no-drag.
     ────────────────────────────────────────────────────────────────────── */
     .footer {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 4px;
+      justify-content: space-between;
       height: 36px;
-      padding: 0 24px;
+      padding: 0 20px;
       border-top: 1px solid rgba(0, 0, 0, 0.06);
       font-size: 11.5px;
       font-weight: 500;
@@ -250,11 +266,38 @@
       letter-spacing: 0.01em;
       user-select: none;        /* Prevent accidental text selection on double-click */
       -webkit-user-select: none;
+      flex-shrink: 0;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     /* Separator dots between footer items */
     .footer-sep {
       opacity: 0.4;
+    }
+
+    /* Prefs button in footer — clickable, no-drag */
+    .footer-prefs-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: rgba(26, 26, 46, 0.38);
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      line-height: 1;
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+      transition: color 120ms ease;
+    }
+    .footer-prefs-btn:hover {
+      color: rgba(26, 26, 46, 0.70);
     }
 
     /* Subtle pulse on the auto-save indicator when content is actively saving */
@@ -266,11 +309,296 @@
     .saving {
       animation: save-pulse 600ms ease-in-out 2;
     }
+
+    /* ── Preferences panel ───────────────────────────────────────────────
+       An in-window sheet that overlays the lower portion of the window.
+       It slides up from the bottom over the frosted glass card.
+
+       Design:
+         - Same glass material as the main window (inherits backdrop-filter
+           from .window — stacks correctly because it's inside .window)
+         - Separated from the main content by a strong frosted divider line
+         - Each row is a label + toggle switch
+         - Credits section at the bottom with small print
+
+       The panel is toggled by setting/removing `.prefs-open` on .window.
+       When open, the editor is visually dimmed with a translucent overlay.
+    ────────────────────────────────────────────────────────────────────── */
+
+    /* Dim overlay over the editor when prefs are open */
+    .editor-dim {
+      position: absolute;
+      inset: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.45);
+      /* Hidden by default */
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+      z-index: 10;
+      /* Don't cover the prefs panel itself */
+      border-radius: 14px 14px 0 0;
+    }
+
+    .prefs-open .editor-dim {
+      opacity: 1;
+      pointer-events: auto;  /* Clicking the dim area closes prefs */
+    }
+
+    /* The prefs sheet itself */
+    .prefs-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+
+      /* Frosted glass — slightly more opaque than the window so it reads
+         as a "layer above" */
+      background: rgba(248, 248, 252, 0.92);
+      backdrop-filter: blur(32px) saturate(160%);
+      -webkit-backdrop-filter: blur(32px) saturate(160%);
+
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 0 0 13px 13px;
+
+      padding: 20px 24px 20px;
+
+      /* Hidden by default — slides up when opened */
+      transform: translateY(100%);
+      opacity: 0;
+      transition:
+        transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 200ms ease;
+
+      /* Disable drag on the whole panel — everything inside is interactive */
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+
+      /* Allow the panel to be taller than the content if window is small */
+      overflow-y: auto;
+      max-height: calc(100% - 80px);
+    }
+
+    /* When prefs are open, slide the panel up */
+    .prefs-open .prefs-panel {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Panel header — "Preferences" title + close button */
+    .prefs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .prefs-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(26, 26, 46, 0.55);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* Close (×) button */
+    .prefs-close {
+      background: none;
+      border: none;
+      padding: 2px 4px;
+      font-family: inherit;
+      font-size: 18px;
+      font-weight: 400;
+      color: rgba(26, 26, 46, 0.30);
+      cursor: pointer;
+      line-height: 1;
+      border-radius: 4px;
+      transition: color 120ms ease, background 120ms ease;
+    }
+    .prefs-close:hover {
+      color: rgba(26, 26, 46, 0.70);
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Individual pref row */
+    .pref-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    .pref-row:last-of-type {
+      border-bottom: none;
+    }
+
+    .pref-label {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .pref-label-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a2e;
+      line-height: 1.3;
+    }
+
+    .pref-label-sub {
+      font-size: 11.5px;
+      font-weight: 400;
+      color: rgba(26, 26, 46, 0.42);
+      line-height: 1.3;
+    }
+
+    /* ── iOS-style toggle switch ─────────────────────────────────────────
+       Pure CSS toggle. The hidden <input type="checkbox"> drives state via
+       the :checked pseudo-class. The visible <label> renders the pill track
+       and the white thumb circle.
+    ────────────────────────────────────────────────────────────────────── */
+    .toggle-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    /* Hide the native checkbox — we only use it for state */
+    .toggle-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+
+    /* The pill-shaped track */
+    .toggle-label {
+      display: block;
+      width: 40px;
+      height: 24px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.14);
+      cursor: pointer;
+      transition: background 200ms ease;
+      position: relative;
+    }
+
+    /* The sliding thumb */
+    .toggle-label::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+      transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Checked state — brand accent colour + thumb slides right */
+    .toggle-input:checked + .toggle-label {
+      background: #5b5bf6;
+    }
+    .toggle-input:checked + .toggle-label::after {
+      transform: translateX(16px);
+    }
+
+    /* ── Check for updates button ────────────────────────────────────────── */
+    .check-update-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(91, 91, 246, 0.30);
+      background: rgba(91, 91, 246, 0.06);
+      color: #5b5bf6;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .check-update-btn:hover {
+      background: rgba(91, 91, 246, 0.12);
+      border-color: rgba(91, 91, 246, 0.50);
+    }
+    .check-update-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Update status text — shown inline after the button */
+    #update-status {
+      font-size: 11.5px;
+      color: rgba(26, 26, 46, 0.42);
+      margin-top: 6px;
+      min-height: 16px;
+      transition: color 200ms ease;
+    }
+    #update-status.up-to-date { color: #22c55e; }
+    #update-status.update-available { color: #5b5bf6; font-weight: 500; }
+    #update-status.update-error { color: #ef4444; }
+
+    /* ── Credits section ─────────────────────────────────────────────────
+       Small-print section at the bottom of the prefs panel.
+       Renders as a subtle inset card so it reads as "metadata", not UI.
+    ────────────────────────────────────────────────────────────────────── */
+    .credits {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.035);
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .credits-line {
+      font-size: 11px;
+      font-weight: 400;
+      color: rgba(26, 26, 46, 0.40);
+      line-height: 1.7;
+    }
+
+    .credits-line a {
+      color: rgba(91, 91, 246, 0.75);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(91, 91, 246, 0.25);
+      transition: color 120ms ease, border-color 120ms ease;
+    }
+    .credits-line a:hover {
+      color: #5b5bf6;
+      border-color: rgba(91, 91, 246, 0.60);
+    }
+
+    .credits-line strong {
+      font-weight: 600;
+      color: rgba(26, 26, 46, 0.55);
+    }
+
+    /* ── Updates row sub-area ─────────────────────────────────────────── */
+    .updates-area {
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .updates-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
   </style>
 </head>
 
 <body>
-  <!-- .window is the visible glass card. Its children are the editor and footer. -->
+  <!-- .window is the visible glass card. Its children are the editor, dim overlay,
+       prefs panel, and footer. The dim overlay and prefs panel are absolutely
+       positioned inside .window. -->
   <div class="window" id="window">
 
     <!--
@@ -290,16 +618,82 @@
       placeholder="Start typing… (Esc or ⌘J to close)"
     ></textarea>
 
-    <!-- Status bar: keyboard shortcuts and save indicator -->
+    <!-- Status bar: keyboard shortcuts, save indicator, prefs button -->
     <footer class="footer">
-      <span>⌘J toggle</span>
-      <span class="footer-sep">·</span>
-      <span>esc close</span>
-      <span class="footer-sep">·</span>
-      <span id="save-status">auto-saved</span>
+      <div class="footer-left">
+        <span>⌘J toggle</span>
+        <span class="footer-sep">·</span>
+        <span>esc close</span>
+        <span class="footer-sep">·</span>
+        <span id="save-status">auto-saved</span>
+      </div>
+      <!-- Open preferences via the footer button (⌘, also works globally) -->
+      <button class="footer-prefs-btn" id="footer-prefs-btn" title="Preferences (⌘,)">⚙</button>
     </footer>
 
-  </div>
+    <!-- ── Dim overlay — clicking it closes the prefs panel ────────────── -->
+    <div class="editor-dim" id="editor-dim"></div>
+
+    <!-- ── Preferences panel ───────────────────────────────────────────── -->
+    <div class="prefs-panel" id="prefs-panel" role="dialog" aria-label="Preferences">
+
+      <div class="prefs-header">
+        <span class="prefs-title">Preferences</span>
+        <button class="prefs-close" id="prefs-close" title="Close (Esc)">×</button>
+      </div>
+
+      <!-- Row 1: Launch at login -->
+      <div class="pref-row">
+        <div class="pref-label">
+          <span class="pref-label-text">Launch at login</span>
+          <span class="pref-label-sub">Start Junk automatically when you log in</span>
+        </div>
+        <div class="toggle-wrapper">
+          <input type="checkbox" class="toggle-input" id="toggle-launch" />
+          <label class="toggle-label" for="toggle-launch"></label>
+        </div>
+      </div>
+
+      <!-- Row 2: Auto-check for updates -->
+      <div class="pref-row">
+        <div class="pref-label">
+          <span class="pref-label-text">Auto-check for updates</span>
+          <span class="pref-label-sub">Check GitHub on launch for a newer version</span>
+        </div>
+        <div class="toggle-wrapper">
+          <input type="checkbox" class="toggle-input" id="toggle-autoupdate" />
+          <label class="toggle-label" for="toggle-autoupdate"></label>
+        </div>
+      </div>
+
+      <!-- Row 3: Check for updates manually -->
+      <div class="updates-area">
+        <div class="updates-row">
+          <div class="pref-label">
+            <span class="pref-label-text">Check for updates</span>
+            <span class="pref-label-sub">Current version: <strong id="current-version">…</strong></span>
+          </div>
+          <button class="check-update-btn" id="check-update-btn">Check now</button>
+        </div>
+        <div id="update-status"></div>
+      </div>
+
+      <!-- Credits -->
+      <div class="credits">
+        <p class="credits-line">
+          <strong>Junk</strong> — built with ♥ by <a href="https://paulfleury.com" target="_blank">Paul Fleury</a>.
+          <a href="https://gojunk.app" target="_blank">gojunk.app</a> ·
+          <a href="https://github.com/paulfxyz/junk" target="_blank">GitHub</a>
+        </p>
+        <p class="credits-line" style="margin-top: 4px;">
+          To truly quit: open <strong>Activity Monitor</strong>, search for <strong>Junk</strong>, and force-quit.
+          (⌘Q and the × button hide the window — the process stays alive to keep your shortcut working.)
+        </p>
+      </div>
+
+    </div><!-- /prefs-panel -->
+
+  </div><!-- /window -->
 
   <!--
     type="module" gives us:
@@ -322,24 +716,30 @@
     // injection races with module execution. Capturing once at the top means
     // we might freeze the no-op fallback forever.
     //
-    // Instead we resolve invoke() lazily inside hideWindow() on every call.
-    // This is safe because hideWindow() is only called from user input (Esc
-    // or ⌘J), which cannot happen before the window is visible and focused —
-    // by which point Tauri has always finished injecting its bridge.
-    //
-    // For the event listener (tauri://focus) we keep the optional-chain guard
-    // because that runs at startup, not from user interaction.
+    // Instead we resolve invoke() lazily inside each IPC call. This is safe
+    // because IPC calls are only triggered by user interaction or Tauri events,
+    // both of which happen well after the bridge is injected.
 
     // ── DOM references ──────────────────────────────────────────────────────
     // Cached once at startup — no repeated querySelector in hot paths.
-    const editor     = /** @type {HTMLTextAreaElement} */ (document.getElementById('editor'));
-    const saveStatus = document.getElementById('save-status');
-    const windowEl   = document.getElementById('window');
+    const editor          = /** @type {HTMLTextAreaElement} */ (document.getElementById('editor'));
+    const saveStatus      = document.getElementById('save-status');
+    const windowEl        = document.getElementById('window');
+    const editorDim       = document.getElementById('editor-dim');
+    const prefsPanel      = document.getElementById('prefs-panel');
+    const prefsCloseBtn   = document.getElementById('prefs-close');
+    const footerPrefsBtn  = document.getElementById('footer-prefs-btn');
+    const toggleLaunch    = /** @type {HTMLInputElement} */ (document.getElementById('toggle-launch'));
+    const toggleAutoUpdate= /** @type {HTMLInputElement} */ (document.getElementById('toggle-autoupdate'));
+    const checkUpdateBtn  = document.getElementById('check-update-btn');
+    const updateStatus    = document.getElementById('update-status');
+    const currentVersionEl= document.getElementById('current-version');
 
-    // ── localStorage key ────────────────────────────────────────────────────
-    // Using a namespaced key avoids collisions with other apps that might use
+    // ── localStorage keys ───────────────────────────────────────────────────
+    // Using namespaced keys avoids collisions with other apps that might use
     // the same WebView profile (unlikely, but defensive).
-    const STORAGE_KEY = 'junk-content';
+    const STORAGE_KEY            = 'junk-content';
+    const PREF_AUTO_UPDATE_KEY   = 'junk-auto-update';
 
     // ── Content persistence ─────────────────────────────────────────────────
 
@@ -464,6 +864,153 @@
       }
     }
 
+    // ── Preferences panel ───────────────────────────────────────────────────
+
+    /** Whether the prefs panel is currently visible. */
+    let prefsOpen = false;
+
+    /**
+     * Open the preferences panel.
+     *
+     * Steps:
+     *   1. Load current prefs from Rust (launch_at_login) + localStorage (auto_update)
+     *   2. Slide the panel up
+     *   3. Show the dim overlay (clicking it closes prefs)
+     */
+    async function openPrefs() {
+      if (prefsOpen) return; // Already open — no-op
+      prefsOpen = true;
+
+      // Add class to .window which CSS uses to show panel + dim overlay
+      windowEl.classList.add('prefs-open');
+
+      // Load preferences from Rust side
+      await loadPrefsValues();
+    }
+
+    /**
+     * Close the preferences panel.
+     */
+    function closePrefs() {
+      if (!prefsOpen) return;
+      prefsOpen = false;
+      windowEl.classList.remove('prefs-open');
+      // Return focus to the editor
+      editor.focus();
+    }
+
+    /**
+     * Load the current preference values from Rust + localStorage,
+     * then update the toggle UI to reflect them.
+     */
+    async function loadPrefsValues() {
+      const invokeFn = window.__TAURI__?.core?.invoke;
+
+      // Auto-update — stored in localStorage (Rust doesn't need it)
+      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
+      // Default ON if not set yet
+      toggleAutoUpdate.checked = (autoUpdate === null) ? true : (autoUpdate === 'true');
+
+      if (typeof invokeFn !== 'function') {
+        // Not in Tauri — dev browser fallback
+        toggleLaunch.checked = false;
+        return;
+      }
+
+      try {
+        // get_prefs() returns { launch_at_login: bool }
+        const prefs = await invokeFn('get_prefs');
+        toggleLaunch.checked = prefs.launch_at_login ?? false;
+
+        // Also fetch the current version for the credits label
+        const updateInfo = await invokeFn('check_for_update');
+        if (updateInfo?.current_version) {
+          currentVersionEl.textContent = 'v' + updateInfo.current_version;
+        }
+      } catch (err) {
+        console.warn('get_prefs IPC failed:', err);
+        toggleLaunch.checked = false;
+      }
+    }
+
+    /**
+     * Toggle the "Launch at login" login item via the Rust IPC command.
+     * Called immediately when the toggle changes — no save button needed.
+     */
+    async function setLaunchAtLogin(enabled) {
+      const invokeFn = window.__TAURI__?.core?.invoke;
+      if (typeof invokeFn !== 'function') return;
+
+      try {
+        await invokeFn('set_launch_at_login', { enabled });
+        console.info('[Junk] launch_at_login →', enabled);
+      } catch (err) {
+        console.warn('set_launch_at_login IPC failed:', err);
+        // Revert the toggle if the call failed
+        toggleLaunch.checked = !enabled;
+      }
+    }
+
+    /**
+     * Check GitHub releases API for a newer version.
+     *
+     * We let JS do the fetch (not Rust) because:
+     *   - check_for_update IPC returns current_version + the releases URL
+     *   - window.fetch() to api.github.com works from the WebView with no extra
+     *     capability config (Tauri v2 allows outbound fetch by default)
+     *   - Simpler than adding reqwest/ureq to Cargo.toml
+     */
+    async function checkForUpdate() {
+      checkUpdateBtn.disabled = true;
+      updateStatus.textContent = 'Checking…';
+      updateStatus.className = '';
+
+      const invokeFn = window.__TAURI__?.core?.invoke;
+
+      let currentVersion = null;
+      let releasesUrl = 'https://api.github.com/repos/paulfxyz/junk/releases/latest';
+      let releasesPage = 'https://github.com/paulfxyz/junk/releases';
+
+      if (typeof invokeFn === 'function') {
+        try {
+          const info = await invokeFn('check_for_update');
+          currentVersion = info.current_version;
+          releasesUrl = info.releases_url ?? releasesUrl;
+          releasesPage = info.releases_page ?? releasesPage;
+        } catch (err) {
+          console.warn('check_for_update IPC failed:', err);
+        }
+      }
+
+      try {
+        const res  = await fetch(releasesUrl, {
+          headers: { 'Accept': 'application/vnd.github+json' }
+        });
+        const data = await res.json();
+
+        // GitHub tag is "v2.3.0" — strip the leading "v" for comparison
+        const latest = (data.tag_name ?? '').replace(/^v/, '');
+
+        if (!currentVersion || !latest) {
+          throw new Error('Could not parse version strings');
+        }
+
+        if (latest === currentVersion) {
+          updateStatus.textContent = `You're up to date (${latest})`;
+          updateStatus.className = 'up-to-date';
+        } else {
+          updateStatus.innerHTML = `Update available: <a href="${releasesPage}" target="_blank">v${latest}</a>`;
+          updateStatus.className = 'update-available';
+        }
+      } catch (err) {
+        console.warn('Update check failed:', err);
+        updateStatus.textContent = 'Could not check — are you online?';
+        updateStatus.className = 'update-error';
+      } finally {
+        checkUpdateBtn.disabled = false;
+      }
+    }
+
     // ── Keyboard handlers ───────────────────────────────────────────────────
 
     /**
@@ -471,10 +1018,11 @@
      * regardless of which element has focus.
      *
      * Handled keys:
-     *   Escape        → hide the window
+     *   Escape        → close prefs if open, otherwise hide the window
      *   Cmd+J / Ctrl+J → hide the window (belt-and-suspenders — the OS-level
      *                    shortcut from Rust also fires, but we want instant
      *                    response even if there's IPC latency on the Rust side)
+     *   Cmd+, / Ctrl+, → open preferences panel (belt-and-suspenders)
      *
      * Why document-level and not window-level?
      *   The textarea captures key events before they bubble to `window`. Using
@@ -483,21 +1031,61 @@
      *   so Esc always works even when the textarea is focused.
      */
     document.addEventListener('keydown', (e) => {
-      // Escape — hide
+      // Escape — close prefs if open, otherwise hide the window
       if (e.key === 'Escape') {
-        e.preventDefault();   // Prevent browsers from doing default Esc behaviour
+        e.preventDefault();
+        if (prefsOpen) {
+          closePrefs();
+        } else {
+          hideWindow();
+        }
+        return;
+      }
+
+      const isMeta = e.metaKey || e.ctrlKey;
+
+      // Cmd+J (macOS) or Ctrl+J (Windows/Linux) — also hide
+      if (isMeta && e.key === 'j') {
+        e.preventDefault();
         hideWindow();
         return;
       }
 
-      // Cmd+J (macOS) or Ctrl+J (Windows/Linux) — also hide
-      const isMeta = e.metaKey || e.ctrlKey;
-      if (isMeta && e.key === 'j') {
-        e.preventDefault();   // Prevent default browser behaviour (if any)
-        hideWindow();
+      // Cmd+, / Ctrl+, — open preferences (belt-and-suspenders; also fired by Rust shortcut)
+      if (isMeta && e.key === ',') {
+        e.preventDefault();
+        if (prefsOpen) {
+          closePrefs();
+        } else {
+          openPrefs();
+        }
         return;
       }
     }, { capture: true }); // capture: true → fires before textarea sees the event
+
+    // ── Preferences event listeners ─────────────────────────────────────────
+
+    // Close button (×)
+    prefsCloseBtn.addEventListener('click', closePrefs);
+
+    // Dim overlay — clicking the darkened area closes prefs
+    editorDim.addEventListener('click', closePrefs);
+
+    // Footer gear button — opens prefs
+    footerPrefsBtn.addEventListener('click', openPrefs);
+
+    // Launch at login toggle — fires immediately on change
+    toggleLaunch.addEventListener('change', () => {
+      setLaunchAtLogin(toggleLaunch.checked);
+    });
+
+    // Auto-update toggle — persisted in localStorage
+    toggleAutoUpdate.addEventListener('change', () => {
+      localStorage.setItem(PREF_AUTO_UPDATE_KEY, String(toggleAutoUpdate.checked));
+    });
+
+    // Check for updates button
+    checkUpdateBtn.addEventListener('click', checkForUpdate);
 
     // ── Paste anywhere ──────────────────────────────────────────────────────
 
@@ -517,6 +1105,10 @@
         // Textarea already focused — let the default paste behaviour handle it
         return;
       }
+
+      // Don't redirect paste if prefs are open (user might be pasting a URL check
+      // etc., though the prefs panel has no text inputs currently)
+      if (prefsOpen) return;
 
       // Read text from the clipboard event's DataTransfer object.
       // This is synchronous and works without the Clipboard API permission.
@@ -542,26 +1134,24 @@
       editor.focus();
     });
 
-    // ── Tauri event listener — window shown ─────────────────────────────────
+    // ── Tauri event listeners ────────────────────────────────────────────────
 
     /**
-     * Listen for the Tauri 'tauri://focus' event which fires every time the
-     * window is brought to the foreground (shown + focused).
+     * Listen for Tauri events.
      *
-     * This is the hook for re-running the fly-in animation and moving the
-     * cursor to the end.
+     * 'tauri://focus'  — fires every time the window is brought to foreground.
+     *                    Re-triggers fly-in animation and refocuses the editor.
      *
-     * Why 'tauri://focus' and not a custom event?
-     *   Tauri emits this event natively whenever the webview gains focus. It's
-     *   the most reliable signal that the window has just been shown via the
-     *   global shortcut, because the shortcut callback calls set_focus() which
-     *   triggers this event.
+     * 'open-prefs'     — emitted by Rust when the ⌘, global shortcut fires
+     *                    (register_prefs_shortcut in main.rs) or when the
+     *                    open_prefs IPC command is called. Opens the prefs panel.
      *
      * Note: `window.__TAURI__?.event?.listen` may be undefined when running
      * in a regular browser for local development. The optional chaining
      * gracefully skips the registration in that case.
      */
     if (window.__TAURI__?.event?.listen) {
+      // Window shown / focused
       window.__TAURI__.event.listen('tauri://focus', () => {
         triggerFlyIn();
         // Force the WebView document to claim OS keyboard focus before we
@@ -571,9 +1161,59 @@
         window.focus();
         focusEditor();
       });
+
+      // Open prefs — emitted from Rust's ⌘, shortcut or open_prefs IPC command
+      window.__TAURI__.event.listen('open-prefs', () => {
+        openPrefs();
+      });
     } else {
       // Development fallback: auto-focus when page loads in a regular browser
       focusEditor();
+    }
+
+    // ── Auto-update on startup ───────────────────────────────────────────────
+
+    /**
+     * If "auto-check for updates" is enabled in prefs, check on startup.
+     *
+     * We delay slightly so the window animation finishes before any network
+     * activity that might briefly stall the UI thread.
+     */
+    async function maybeAutoCheckUpdate() {
+      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
+      // Default ON if not yet set
+      const shouldCheck = (autoUpdate === null) ? true : (autoUpdate === 'true');
+      if (!shouldCheck) return;
+
+      // Wait for window to fully show before checking
+      await new Promise(r => setTimeout(r, 2000));
+
+      const invokeFn = window.__TAURI__?.core?.invoke;
+      if (typeof invokeFn !== 'function') return;
+
+      try {
+        const info = await invokeFn('check_for_update');
+        const currentVersion = info.current_version;
+        const releasesUrl = info.releases_url ?? 'https://api.github.com/repos/paulfxyz/junk/releases/latest';
+        const releasesPage = info.releases_page ?? 'https://github.com/paulfxyz/junk/releases';
+
+        const res  = await fetch(releasesUrl, {
+          headers: { 'Accept': 'application/vnd.github+json' }
+        });
+        const data = await res.json();
+        const latest = (data.tag_name ?? '').replace(/^v/, '');
+
+        if (latest && currentVersion && latest !== currentVersion) {
+          // A newer version exists — log it (the user will see it in prefs)
+          console.info(`[Junk] Update available: v${latest} (current: v${currentVersion})`);
+          // Mark the prefs button to draw attention
+          footerPrefsBtn.title = `Update available: v${latest} — click to open Preferences`;
+          footerPrefsBtn.style.color = '#5b5bf6';
+          footerPrefsBtn.style.opacity = '0.9';
+        }
+      } catch {
+        // Silent failure on auto-check — don't alarm the user
+      }
     }
 
     // ── Textarea input handler ──────────────────────────────────────────────
@@ -585,6 +1225,7 @@
      * Initialise the app:
      *   1. Load persisted content into the textarea
      *   2. Focus the textarea (cursor at end)
+     *   3. Auto-check for updates in the background (if enabled)
      *
      * We do NOT trigger the fly-in here because the window starts hidden
      * (visible: false in tauri.conf.json) — the animation will fire when the
@@ -592,8 +1233,9 @@
      */
     loadContent();
     focusEditor();
+    maybeAutoCheckUpdate();
 
-    console.info('[Junk] Frontend initialised. Press ⌘J to toggle.');
+    console.info('[Junk] v2.3.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
   </script>
 </body>
 </html>

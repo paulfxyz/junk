@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.2.1-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.3.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -48,6 +48,11 @@ Junk is that place.
 |---|---|
 | **⌘J / Ctrl+J** | Global hotkey — works in any app, any macOS Space, any virtual desktop |
 | **Esc** | Hides the window — OS-level shortcut (v2.2.0), works even before JS loads |
+| **⌘, / Ctrl+,** | Opens the Preferences panel from anywhere — even when the window is hidden |
+| **Persistent process** | Window hides instead of quitting — global shortcut always works, content never lost |
+| **Launch at login** | Optional OS login item via `tauri-plugin-autostart` (LaunchAgent on macOS) |
+| **Auto-update check** | Checks GitHub releases API on launch (optional, toggleable in Preferences) |
+| **Preferences panel** | In-window frosted-glass sheet — launch at login, auto-update, credits, quit instructions |
 | **Auto-save** | Content persists to `localStorage` with a 300 ms debounce — zero data loss |
 | **Frosted glass UI** | `backdrop-filter: blur(40px) saturate(180%)` — beautiful on any wallpaper |
 | **Always on top** | Floats above all other windows so it's always reachable |
@@ -68,7 +73,7 @@ Junk is that place.
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.2.1_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.3.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -86,7 +91,7 @@ Junk is that place.
 
 ### Windows
 
-1. Download **`Junk_2.2.1_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.3.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    **Why SmartScreen?** The binary is not code-signed with a Windows Extended Validation (EV) certificate ($200–500/yr). SmartScreen flags all unsigned binaries. The source code is fully public — if you prefer, build it yourself (instructions below).
@@ -94,10 +99,10 @@ Junk is that place.
 3. Junk launches on login and disappears into the background.
 4. Press **Ctrl+J** from any application.
 
-Alternatively, download the **MSI** (`Junk_2.2.1_x64_en-US.msi`) for enterprise/silent deployment:
+Alternatively, download the **MSI** (`Junk_2.3.0_x64_en-US.msi`) for enterprise/silent deployment:
 
 ```
-msiexec /i Junk_2.2.1_x64_en-US.msi /quiet
+msiexec /i Junk_2.3.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -106,13 +111,13 @@ msiexec /i Junk_2.2.1_x64_en-US.msi /quiet
 
 ```sh
 # Download
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.1_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.3.0_amd64.AppImage
 
 # Make executable
-chmod +x Junk_2.2.1_amd64.AppImage
+chmod +x Junk_2.3.0_amd64.AppImage
 
 # Run
-./Junk_2.2.1_amd64.AppImage
+./Junk_2.3.0_amd64.AppImage
 ```
 
 AppImages are portable — they run on any modern x86_64 Linux distribution without installation. No sudo required.
@@ -125,8 +130,8 @@ AppImages are portable — they run on any modern x86_64 Linux distribution with
 
 ```sh
 # Download and install
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.1_amd64.deb
-sudo dpkg -i Junk_2.2.1_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.3.0_amd64.deb
+sudo dpkg -i Junk_2.3.0_amd64.deb
 
 # Run
 junk
@@ -140,7 +145,9 @@ junk
 |---|---|
 | **⌘J** (macOS) | Toggle the window: show if hidden, hide if visible |
 | **Ctrl+J** (Windows / Linux) | Toggle the window |
-| **Esc** | Hide the window |
+| **Esc** | Hide the window (or close Preferences if open) |
+| **⌘,** (macOS) | Open Preferences panel |
+| **Ctrl+,** (Windows / Linux) | Open Preferences panel |
 | Click and drag anywhere | Move the window — the entire surface is a drag handle |
 | **⌘A** / **Ctrl+A** | Select all text |
 | **⌘V** / **Ctrl+V** | Paste — works even without clicking the textarea first |
@@ -497,6 +504,16 @@ The release job uses `find dist/ -type f` (not glob patterns) to enumerate artif
 
 ## Changelog
 
+### v2.3.0 — 2026-04-14
+- **Feature:** Persistent process — `CloseRequested` and `ExitRequested` events now call `window.hide()` instead of quitting. The process lives indefinitely so the global shortcut is always registered. This is the same architecture used by Alfred, Paste, and Magnet.
+- **Feature:** Preferences panel — in-window frosted-glass sheet (`⌘,` / `Ctrl+,` to open). Slides up from the bottom. Three options: "Launch at login" toggle, "Auto-check for updates" toggle, and a "Check now" button with inline status. Credits section explains how to truly quit.
+- **Feature:** Launch at login — uses `tauri-plugin-autostart` with `MacosLauncher::LaunchAgent` (per-user plist, no root required). Reads real OS state on every panel open so it stays accurate if the user toggles it in System Settings.
+- **Feature:** Update checker — calls GitHub Releases API (`/repos/paulfxyz/junk/releases/latest`) from JS on startup (if auto-update enabled) and on demand from the Preferences button. Compares semver tags and surfaces a link if an update is available.
+- **Feature:** Three OS-level global shortcuts: `⌘J`/`Ctrl+J` (toggle), `Esc` (hide), `⌘,`/`Ctrl+,` (open prefs). All registered in Rust — bypass the WebView entirely.
+- **Improvement:** Footer now shows a gear icon (⚙) as a clickable prefs button alongside existing shortcuts
+- **Improvement:** `Esc` now closes the Preferences panel if open, rather than hiding the window
+- **Architecture:** `.build()` + `.run(|app, event| {...})` pattern replaces `.run(...)` — required to intercept `RunEvent::ExitRequested` and `RunEvent::WindowEvent::CloseRequested`
+
 ### v2.2.1 — 2026-04-14
 - **Fix:** Esc key now reliably invokes `hide_window` — `invoke()` is now resolved lazily inside `hideWindow()` on every call, not captured once at module-load time. Previously a race between `<script type="module">` deferred execution and Tauri's async `window.__TAURI__.core` injection meant `invoke` could silently freeze as a no-op
 - **Fix:** `window.focus()` called before `editor.focus()` on `tauri://focus` event — ensures WebView claims OS keyboard focus before the textarea receives it, fixing Esc on macOS WKWebView
@@ -563,6 +580,11 @@ junk (Rust binary)
 │   ├── Windows: RegisterHotKey (Win32)
 │   └── Linux: XGrabKey via libxdo
 │
+├── tauri-plugin-autostart 2.x         ← OS login item management
+│   ├── macOS: LaunchAgent plist (~Library/LaunchAgents/)
+│   ├── Windows: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+│   └── Linux: ~/.config/autostart/junk.desktop
+│
 ├── serde + serde_json 1.x             ← IPC serialisation
 ├── log 0.4                            ← Structured logging facade
 └── env_logger 0.11                    ← RUST_LOG-driven log subscriber (debug builds)
@@ -580,8 +602,11 @@ A: It's not damaged — it's quarantined. macOS Gatekeeper flags every app downl
 **Q: Why isn't Junk in the Mac App Store?**  
 A: The App Store's sandbox restrictions prevent apps from registering global hotkeys that work across all applications. Junk's core feature is incompatible with the sandbox.
 
-**Q: Will Junk phone home, collect analytics, or check for updates?**  
-A: No. Junk has no network code. There is no update daemon, no telemetry, no crash reporting. The only data it writes is your text, locally.
+**Q: Will Junk phone home or collect analytics?**  
+A: No telemetry, no analytics, no crash reporting. The only network request Junk makes is an optional update check to `api.github.com/repos/paulfxyz/junk/releases/latest` — you can disable it in Preferences. The only data it writes locally is your text.
+
+**Q: How do I truly quit Junk?**  
+A: Open **Activity Monitor**, search for "Junk", and force-quit the process. By design, ⌘Q and the × button hide the window instead of exiting — this keeps the global shortcut alive at all times. The Preferences panel explains this with a one-liner.
 
 **Q: ⌘J conflicts with another app on my Mac. Can I change it?**  
 A: Not yet via UI — it's hardcoded. If you need to change it, edit `main.rs` (change `Code::KeyJ` to any other `Code::*` variant), rebuild, and replace your app bundle. A preference pane for the shortcut is on the roadmap.

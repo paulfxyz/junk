@@ -3,7 +3,7 @@
 
   "identifier": "default",
 
-  "description": "Default capability set for Junk. Grants the minimum set of permissions required for the app to function: global shortcut registration, window show/hide/focus, and core IPC. No filesystem, no network, no shell — Junk stores content in localStorage (browser-native) and has no reason to touch the OS beyond these capabilities.",
+  "description": "Default capability set for Junk v2.3.0. Adds autostart and event permissions for preferences panel on top of the existing window/shortcut capabilities.",
 
   "local": true,
 
@@ -28,6 +28,12 @@
 
     "global-shortcut:allow-unregister",
 
-    "global-shortcut:allow-is-registered"
+    "global-shortcut:allow-is-registered",
+
+    "autostart:allow-enable",
+
+    "autostart:allow-disable",
+
+    "autostart:allow-is-enabled"
   ]
 }

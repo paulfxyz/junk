@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "2.2.1"
+version = "2.3.0"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -23,13 +23,18 @@ tauri-build = { version = "2", features = [] }
 # ── Runtime dependencies ───────────────────────────────────────────────────────
 [dependencies]
 # Core Tauri framework — brings in the WebView, IPC, window management, etc.
-# We enable the "rustls-tls" feature so we don't depend on OpenSSL on Linux,
-# and "devtools" so developers can open the inspector in debug builds.
+# We enable "devtools" so developers can open the inspector in debug builds.
 tauri = { version = "2", features = ["devtools"] }
 
 # Global shortcut plugin (Tauri v2 splits plugins out of core).
 # This replaces the old tauri::GlobalShortcutManager from v1.
 tauri-plugin-global-shortcut = "2"
+
+# Autostart plugin — registers/unregisters the app as a login item.
+# On macOS: uses SMAppService (LaunchAgent plist on macOS 13+, LSSharedFileList on older).
+# On Windows: writes/removes the HKCU\...\Run registry key.
+# On Linux: creates/removes ~/.config/autostart/<app>.desktop.
+tauri-plugin-autostart = "2"
 
 # Serialisation — required for passing data across the Tauri IPC bridge.
 # Every type that crosses invoke() / emit() must implement Serialize/Deserialize.
