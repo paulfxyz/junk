@@ -210,8 +210,13 @@ fn set_macos_activation_policy(app: &AppHandle) {
     use tauri::ActivationPolicy;
     // set_activation_policy returns a bool indicating whether the policy
     // changed. We don't need to act on it, but we log for diagnostics.
-    let changed = app.set_activation_policy(ActivationPolicy::Accessory);
-    log::info!("macOS activation policy set to Accessory (changed={changed})");
+    // set_activation_policy returns Result<(), tauri::Error> in Tauri v2.
+    // We ignore the return value — if it fails the worst outcome is the Dock
+    // icon appears, which is cosmetic. Log success or the error string.
+    match app.set_activation_policy(ActivationPolicy::Accessory) {
+        Ok(()) => log::info!("macOS activation policy set to Accessory"),
+        Err(e) => log::warn!("Could not set activation policy: {e}"),
+    }
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
