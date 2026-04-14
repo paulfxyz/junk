@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     name: Build macOS DMG
-    runs-on: macos-14        # Apple Silicon (M1) runner — builds universal binaries
+    runs-on: macos-14        # Apple Silicon (M1) runner
 
     steps:
       - name: Checkout
@@ -26,22 +26,48 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # electron-builder needs iconutil to convert .iconset → .icns
-      # macOS runners have it pre-installed.
       - name: Build ICNS from iconset
-        run: |
-          iconutil -c icns assets/icon.iconset -o assets/icon.icns
+        run: iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build DMG (arm64 + x64)
+      - name: Build app (unsigned)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code-signing is skipped (no certificate). Users bypass with:
-          # xattr -rd com.apple.quarantine /Applications/Junk.app
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run build
+          CSC_LINK: ""
+        # Build to directory first so we can ad-hoc sign the .app,
+        # then package into DMG manually
+        run: |
+          # Step 1: build unpacked .app for each arch
+          npx electron-builder --mac dir --arm64 --config.mac.identity=null
+          npx electron-builder --mac dir --x64  --config.mac.identity=null
+
+          echo "--- built app dirs ---"
+          find dist -name "*.app" -maxdepth 3 | head -10
+
+      - name: Ad-hoc sign .app bundles
+        run: |
+          # Ad-hoc sign (-) satisfies Gatekeeper's basic check on recent macOS
+          # This prevents the "app is damaged" error. Users still right-click → Open once.
+          for app in dist/mac-arm64/*.app dist/mac/*.app dist/mac-x64/*.app; do
+            if [ -d "$app" ]; then
+              echo "Signing $app"
+              codesign --force --deep --sign - --options runtime "$app"
+              echo "Verified: $(codesign --verify --verbose "$app" 2>&1 | head -2)"
+            fi
+          done
+
+      - name: Package into DMG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
+        run: |
+          # Now package the already-signed .app into DMG
+          npx electron-builder --mac dmg --arm64 --config.mac.identity=null --config.mac.sign=false
+          npx electron-builder --mac dmg --x64  --config.mac.identity=null --config.mac.sign=false
 
       - name: List output
-        run: ls -lh dist/
+        run: ls -lh dist/*.dmg
 
       - name: Upload DMG artifacts
         uses: actions/upload-artifact@v4
@@ -58,16 +84,16 @@ jobs:
           body: |
             ## Junk ${{ github.ref_name }}
 
-            A flying macOS scratchpad. Hit **⌘J** anywhere, type or paste, hit **Esc** to dismiss. Content is auto-saved.
+            A flying macOS scratchpad. Hit **⌘J** anywhere, type or paste, hit **Esc** to dismiss.
 
             ### Install
             1. Download the `.dmg` for your Mac:
                - **Apple Silicon (M1/M2/M3/M4):** `Junk-*-arm64.dmg`
                - **Intel Mac:** `Junk-*-x64.dmg`
             2. Open the `.dmg`, drag **Junk.app** to `/Applications`
-            3. First launch: right-click → **Open** → **Open** (Gatekeeper bypass for unsigned apps)
+            3. First launch — right-click → **Open** → **Open** (Gatekeeper bypass, unsigned app)
 
-            Or via Terminal:
+            Or strip the quarantine flag via Terminal:
             ```bash
             xattr -rd com.apple.quarantine /Applications/Junk.app
             ```

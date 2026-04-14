@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] — 2026-04-14
+
+### Fixed
+- Ad-hoc code signing of `.app` bundle before DMG packaging — prevents macOS "app is damaged" Gatekeeper error
+- `identity: null` in electron-builder config to fully suppress Apple certificate discovery
+
+---
+
 ## [1.0.0] — 2026-04-14
 
 ### Added
@@ -27,4 +35,5 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - GitHub Actions CI — builds `arm64` + `x64` `.dmg` on tag push
 - MIT license
 
+[1.1.0]: https://github.com/paulfxyz/junk/releases/tag/v1.1.0
 [1.0.0]: https://github.com/paulfxyz/junk/releases/tag/v1.0.0

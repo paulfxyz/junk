@@ -1,6 +1,6 @@
 {
   "name": "junk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A flying scratchpad for macOS. Hit CMD+J, type, paste, think. Gone when you're done.",
   "main": "src/main.js",
   "author": "Paul Fleury <hello@paulfleury.com>",
@@ -32,7 +32,12 @@
           "arch": ["arm64", "x64"]
         }
       ],
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "identity": null,
+      "gatekeeperAssess": false,
+      "hardenedRuntime": false,
+      "entitlements": null,
+      "entitlementsInherit": null
     },
     "dmg": {
       "title": "Junk",
