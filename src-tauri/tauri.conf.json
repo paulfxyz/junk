@@ -54,8 +54,6 @@
 
     "targets": "all",
 
-    "identifier": "com.paulfleury.junk",
-
     "publisher": "Paul Fleury",
 
     "icon": [
@@ -70,7 +68,7 @@
 
     "externalBin": [],
 
-    "copyright": "© 2024 Paul Fleury",
+    "copyright": "© 2025 Paul Fleury",
 
     "category": "Productivity",
 
@@ -81,15 +79,11 @@
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "10.15",
-      "exceptionDomain": "",
       "signingIdentity": null,
-      "providerShortName": null,
       "entitlements": null,
       "dmg": {
-        "background": null,
         "windowSize": { "width": 660, "height": 400 },
-        "appPosition": { "x": 180, "y": 170 },
-        "applicationsPosition": { "x": 480, "y": 170 }
+        "appPosition": { "x": 180, "y": 170 }
       }
     },
 
@@ -101,9 +95,6 @@
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       },
-      "wix": {
-        "language": "en-US"
-      },
       "nsis": {
         "languages": ["English"]
       }
@@ -111,9 +102,6 @@
 
     "linux": {
       "deb": {
-        "depends": []
-      },
-      "rpm": {
         "depends": []
       },
       "appimage": {
