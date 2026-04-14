@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v2.6.0)
+  Junk — frontend (v2.7.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -174,14 +174,13 @@
       display: flex;
       flex-direction: column;
 
-      /* v2.6.0: Full-window drag region.
-         The entire .window surface is draggable — you can grab Junk from
-         the header, the empty margins around the text area, or the footer.
-         Interactive children (textarea, buttons, links) each override with
-         -webkit-app-region: no-drag so their clicks still register normally.
-         This is the cleanest UX: natural, discoverable, zero JavaScript. */
-      -webkit-app-region: drag;
-      app-region: drag;
+      /* v2.7.0: Drag is handled via startDragging() IPC on mousedown.
+         -webkit-app-region CSS is NOT used — it is unreliable on macOS
+         WKWebView with decorations:false + transparent:true windows.
+         The JS drag listener (see bottom of <script>) calls the native
+         Tauri startDragging command which goes straight to the OS window
+         manager, bypassing the WebView layer entirely. */
+      cursor: default;
 
       /* Fly-in on every show. The animation name is re-triggered in JS by
          removing and re-adding the class — see triggerFlyIn(). */
@@ -211,10 +210,6 @@
       outline: none;
       resize: none;
 
-      /* Must not be a drag region — clicking/selecting text would conflict
-         with the window-drag behaviour set on .window. */
-      -webkit-app-region: no-drag;
-      app-region: no-drag;
 
       font-family: 'Space Grotesk', system-ui, sans-serif;
       font-size: 22px;
@@ -285,7 +280,7 @@
       opacity: 0.4;
     }
 
-    /* Prefs button in footer — clickable, no-drag */
+    /* Prefs button in footer — clickable */
     .footer-prefs-btn {
       background: none;
       border: none;
@@ -297,8 +292,6 @@
       letter-spacing: 0.01em;
       cursor: pointer;
       line-height: 1;
-      -webkit-app-region: no-drag;
-      app-region: no-drag;
       transition: color 120ms ease;
     }
     .footer-prefs-btn:hover {
@@ -376,9 +369,7 @@
         transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
         opacity 200ms ease;
 
-      /* Disable drag on the whole panel — everything inside is interactive */
-      -webkit-app-region: no-drag;
-      app-region: no-drag;
+      /* Everything inside the prefs panel is interactive — cursor is normal */
 
       /* Allow the panel to be taller than the content if window is small */
       overflow-y: auto;
@@ -1247,6 +1238,86 @@
     // ── Textarea input handler ──────────────────────────────────────────────
     editor.addEventListener('input', scheduleSave);
 
+    // ── Window drag (v2.7.0) ──────────────────────────────────────────────────
+
+    /**
+     * Native window drag via Tauri's startDragging() IPC.
+     *
+     * WHY NOT -webkit-app-region: drag?
+     *   On macOS with decorations:false + transparent:true, WKWebView intercepts
+     *   the pointer event before the OS window manager sees it. The CSS hint is
+     *   silently ignored — the drag never starts. This is a known macOS/WKWebView
+     *   limitation that affects all transparent frameless Tauri windows.
+     *
+     * HOW THIS WORKS:
+     *   On mousedown anywhere on .window we check whether the click landed on
+     *   an interactive element. If not, we call Tauri's start_dragging command
+     *   which invokes the native NSWindow drag API directly — zero WebView
+     *   involvement, buttery smooth on all platforms.
+     *
+     * DRAG ZONES (anywhere that is NOT):
+     *   textarea  — typing / cursor placement
+     *   input     — pref toggles / text inputs
+     *   button    — clickable controls (prefs ⚙, close, check-update…)
+     *   select    — dropdowns
+     *   a         — links inside the prefs panel
+     *   label     — toggle labels
+     *   .prefs-panel — the whole settings sheet and all its children
+     *   .editor-dim  — the dim overlay (clicking it closes prefs)
+     */
+    (function registerDragListener() {
+      const INTERACTIVE = [
+        'textarea', 'input', 'button', 'select', 'a', 'label',
+        '[contenteditable]', '.prefs-panel', '.editor-dim',
+      ].join(', ');
+
+      const windowEl = document.querySelector('.window');
+      if (!windowEl) return;
+
+      windowEl.addEventListener('mousedown', (e) => {
+        // Primary button only — right-click opens context menus, not drag.
+        if (e.button !== 0) return;
+
+        // Walk from the click target up to .window.
+        // If any node along the way matches an interactive selector, bail out
+        // and let the normal click/focus/select behaviour through.
+        let node = e.target;
+        while (node && node !== windowEl) {
+          if (node.matches && node.matches(INTERACTIVE)) return;
+          node = node.parentElement;
+        }
+
+        // Non-interactive surface hit — initiate a native OS window drag.
+        // We resolve invoke lazily (not at module load) to avoid the
+        // Tauri injection race condition that broke hide_window in v2.2.0.
+        const invokeFn = window.__TAURI__?.core?.invoke;
+        if (typeof invokeFn === 'function') {
+          invokeFn('start_dragging').catch(() => {
+            // Silent failure — worst case the window just doesn't move.
+          });
+        }
+      });
+
+      // Show a grab cursor whenever the mouse is over a draggable zone,
+      // so the affordance is clear without any visible handle.
+      windowEl.addEventListener('mousemove', (e) => {
+        let node = e.target;
+        while (node && node !== windowEl) {
+          if (node.matches && node.matches(INTERACTIVE)) {
+            windowEl.style.cursor = '';
+            return;
+          }
+          node = node.parentElement;
+        }
+        windowEl.style.cursor = 'grab';
+      });
+
+      windowEl.addEventListener('mouseleave', () => {
+        windowEl.style.cursor = '';
+      });
+    })();
+
+
     // ── Startup ─────────────────────────────────────────────────────────────
 
     /**
@@ -1263,7 +1334,7 @@
     focusEditor();
     maybeAutoCheckUpdate();
 
-    console.info('[Junk] v2.6.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
+    console.info('[Junk] v2.7.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
   </script>
 </body>
 </html>
