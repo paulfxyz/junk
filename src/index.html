@@ -312,22 +312,23 @@
   <script type="module">
     // ── Tauri IPC bridge ────────────────────────────────────────────────────
     //
-    // Tauri v2 injects `window.__TAURI__` into every WebView before any user
-    // script runs. The `core` sub-namespace provides `invoke()` for calling
+    // Tauri v2 injects `window.__TAURI__` into every WebView before user
+    // scripts run. The `core` sub-namespace provides `invoke()` for calling
     // Rust #[tauri::command] functions.
     //
-    // Why do we access it through window.__TAURI__ rather than importing from
-    // @tauri-apps/api?
-    //   Because we have no bundler. @tauri-apps/api is an npm package that
-    //   requires a build step (Vite, webpack, etc.). For a single-file app
-    //   the global is simpler and equally correct — it is the same code path
-    //   under the hood.
+    // IMPORTANT: Do NOT capture invoke at module-load time.
+    // With <script type="module">, the script is deferred and runs after DOM
+    // parse — but on some Tauri v2 / WKWebView builds, the __TAURI__.core
+    // injection races with module execution. Capturing once at the top means
+    // we might freeze the no-op fallback forever.
     //
-    // We pull `invoke` out once at startup and use it as a regular function.
-    // If somehow __TAURI__ is not present (e.g. opening index.html in a regular
-    // browser during development), we shim it with a no-op so the rest of the
-    // code runs without errors.
-    const invoke = window.__TAURI__?.core?.invoke ?? (async () => {});
+    // Instead we resolve invoke() lazily inside hideWindow() on every call.
+    // This is safe because hideWindow() is only called from user input (Esc
+    // or ⌘J), which cannot happen before the window is visible and focused —
+    // by which point Tauri has always finished injecting its bridge.
+    //
+    // For the event listener (tauri://focus) we keep the optional-chain guard
+    // because that runs at startup, not from user interaction.
 
     // ── DOM references ──────────────────────────────────────────────────────
     // Cached once at startup — no repeated querySelector in hot paths.
@@ -449,10 +450,16 @@
      * fails (extremely unlikely), the window simply doesn't hide — no crash.
      */
     async function hideWindow() {
+      // Resolve the IPC bridge lazily on every call — never at module-load time.
+      // See the "Tauri IPC bridge" comment above for the full rationale.
+      const invokeFn = window.__TAURI__?.core?.invoke;
+      if (typeof invokeFn !== 'function') {
+        console.warn('hideWindow: Tauri IPC not ready (window.__TAURI__.core.invoke missing)');
+        return;
+      }
       try {
-        await invoke('hide_window');
+        await invokeFn('hide_window');
       } catch (err) {
-        // Log to the WebView console — visible in Tauri devtools (F12 in dev)
         console.warn('hide_window IPC failed:', err);
       }
     }
@@ -557,6 +564,11 @@
     if (window.__TAURI__?.event?.listen) {
       window.__TAURI__.event.listen('tauri://focus', () => {
         triggerFlyIn();
+        // Force the WebView document to claim OS keyboard focus before we
+        // focus the textarea. Without this, on macOS the WKWebView can be
+        // "shown" by Rust but the keydown events may still route to the
+        // previously focused app for the first few milliseconds.
+        window.focus();
         focusEditor();
       });
     } else {

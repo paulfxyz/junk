@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.2.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.2.1-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -68,7 +68,7 @@ Junk is that place.
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.2.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.2.1_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -86,7 +86,7 @@ Junk is that place.
 
 ### Windows
 
-1. Download **`Junk_2.2.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.2.1_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    **Why SmartScreen?** The binary is not code-signed with a Windows Extended Validation (EV) certificate ($200–500/yr). SmartScreen flags all unsigned binaries. The source code is fully public — if you prefer, build it yourself (instructions below).
@@ -94,10 +94,10 @@ Junk is that place.
 3. Junk launches on login and disappears into the background.
 4. Press **Ctrl+J** from any application.
 
-Alternatively, download the **MSI** (`Junk_2.2.0_x64_en-US.msi`) for enterprise/silent deployment:
+Alternatively, download the **MSI** (`Junk_2.2.1_x64_en-US.msi`) for enterprise/silent deployment:
 
 ```
-msiexec /i Junk_2.2.0_x64_en-US.msi /quiet
+msiexec /i Junk_2.2.1_x64_en-US.msi /quiet
 ```
 
 ---
@@ -106,13 +106,13 @@ msiexec /i Junk_2.2.0_x64_en-US.msi /quiet
 
 ```sh
 # Download
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.0_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.1_amd64.AppImage
 
 # Make executable
-chmod +x Junk_2.2.0_amd64.AppImage
+chmod +x Junk_2.2.1_amd64.AppImage
 
 # Run
-./Junk_2.2.0_amd64.AppImage
+./Junk_2.2.1_amd64.AppImage
 ```
 
 AppImages are portable — they run on any modern x86_64 Linux distribution without installation. No sudo required.
@@ -125,8 +125,8 @@ AppImages are portable — they run on any modern x86_64 Linux distribution with
 
 ```sh
 # Download and install
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.0_amd64.deb
-sudo dpkg -i Junk_2.2.0_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.1_amd64.deb
+sudo dpkg -i Junk_2.2.1_amd64.deb
 
 # Run
 junk
@@ -476,15 +476,15 @@ Tag pushed (e.g. v2.2.0)
         │
         ├─ [macOS runner]    cargo tauri build --target universal-apple-darwin
         │                    ad-hoc codesign (xattr-removable)
-        │                    → Junk_2.2.0_universal.dmg
+        │                    → Junk_2.2.1_universal.dmg
         │
         ├─ [Windows runner]  cargo tauri build
-        │                    → Junk_2.2.0_x64-setup.exe
-        │                    → Junk_2.2.0_x64_en-US.msi
+        │                    → Junk_2.2.1_x64-setup.exe
+        │                    → Junk_2.2.1_x64_en-US.msi
         │
         └─ [Ubuntu runner]   cargo tauri build
-                             → Junk_2.2.0_amd64.AppImage
-                             → Junk_2.2.0_amd64.deb
+                             → Junk_2.2.1_amd64.AppImage
+                             → Junk_2.2.1_amd64.deb
                                       │
                                       ▼
                              All artifacts uploaded to GitHub Release
@@ -496,6 +496,10 @@ The release job uses `find dist/ -type f` (not glob patterns) to enumerate artif
 ---
 
 ## Changelog
+
+### v2.2.1 — 2026-04-14
+- **Fix:** Esc key now reliably invokes `hide_window` — `invoke()` is now resolved lazily inside `hideWindow()` on every call, not captured once at module-load time. Previously a race between `<script type="module">` deferred execution and Tauri's async `window.__TAURI__.core` injection meant `invoke` could silently freeze as a no-op
+- **Fix:** `window.focus()` called before `editor.focus()` on `tauri://focus` event — ensures WebView claims OS keyboard focus before the textarea receives it, fixing Esc on macOS WKWebView
 
 ### v2.2.0 — 2026-04-14
 - **Fix:** Esc key now reliably dismisses the window on all platforms — registered as an OS-level global shortcut in Rust (`register_esc_shortcut()`), bypassing the WebView entirely. Previously, Esc was handled only in JS which was unreliable due to `-webkit-app-region: drag` compositor interception and async module load timing
