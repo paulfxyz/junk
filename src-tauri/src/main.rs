@@ -138,7 +138,7 @@ fn show_and_focus(window: &WebviewWindow) {
 
 // ── Global shortcut registration ──────────────────────────────────────────────
 
-/// Register the CmdOrCtrl+J global shortcut with the OS.
+/// Register the platform-correct global shortcut with the OS.
 ///
 /// Why register after the app is built rather than in a setup hook?
 /// Tauri v2's shortcut plugin requires the app to be fully initialised
@@ -149,20 +149,33 @@ fn show_and_focus(window: &WebviewWindow) {
 /// guarantees plugins are ready by then.
 ///
 /// The shortcut is defined as a `Shortcut` value composed of:
-///   - `Modifiers::SUPER` on macOS (⌘) / `Modifiers::CONTROL` on other OSes
-///   - `Code::KeyJ`
+///   - `Modifiers::SUPER` on macOS  → ⌘J
+///   - `Modifiers::CONTROL` on Windows / Linux → Ctrl+J
 ///
-/// Tauri's global-shortcut plugin abstracts `CmdOrCtrl` via the combined
-/// modifier `Modifiers::SUPER | Modifiers::CONTROL` — on macOS only SUPER
-/// is effective; on Windows/Linux only CONTROL is. The OS ignores the other.
+/// IMPORTANT: Do NOT use `Modifiers::SUPER | Modifiers::CONTROL` combined.
+/// On macOS, registering SUPER|CONTROL means the OS requires *both* ⌘ and
+/// Ctrl to be held simultaneously — i.e. ⌘^J, not ⌘J. This was the v2.0.0
+/// bug: the shortcut appeared to register without error but never fired on
+/// a plain ⌘J press. The fix is to select exactly one modifier per platform
+/// using compile-time cfg guards.
 ///
 /// Returns an error string if registration fails (e.g. another app already
 /// owns that shortcut).
 fn register_global_shortcut(app: &AppHandle) -> Result<(), String> {
-    // Build the shortcut descriptor.
-    // We combine SUPER|CONTROL so a single registration works cross-platform.
-    // The OS only activates when the platform-correct modifier is pressed.
-    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::CONTROL), Code::KeyJ);
+    // Select the correct modifier for this platform at compile time.
+    //
+    // macOS:          Modifiers::SUPER   → the ⌘ (Command) key
+    // Windows/Linux:  Modifiers::CONTROL → the Ctrl key
+    //
+    // Using cfg() here means the wrong branch is completely absent from the
+    // compiled binary — there is zero runtime cost and no logic error possible.
+    #[cfg(target_os = "macos")]
+    let modifiers = Modifiers::SUPER;      // ⌘J on macOS
+
+    #[cfg(not(target_os = "macos"))]
+    let modifiers = Modifiers::CONTROL;    // Ctrl+J on Windows / Linux
+
+    let shortcut = Shortcut::new(Some(modifiers), Code::KeyJ);
 
     // Clone the handle so we can move it into the closure without borrowing
     // `app` beyond this function's lifetime.
