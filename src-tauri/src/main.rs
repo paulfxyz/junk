@@ -40,7 +40,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{
-    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, RunEvent, WebviewWindow,
@@ -200,9 +199,14 @@ async fn check_for_update() -> Result<UpdateResult, String> {
         return Err(format!("GitHub API returned {}", resp.status()));
     }
 
-    let body: serde_json::Value = resp
-        .json()
+    // tauri_plugin_http's reqwest re-export doesn't enable the `json` feature,
+    // so we read the body as text and parse it ourselves with serde_json.
+    let text = resp
+        .text()
         .await
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    let body: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("JSON parse failed: {e}"))?;
 
     // tag_name is "v2.5.0" — strip the leading "v" for semver comparison
@@ -333,9 +337,16 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     //   - 16×16 or 22×22 logical pixels
     //   - Template images (dark/light adaptive) ideally, or a simple monochrome icon
     // We use the app's existing icon — not ideal for menu bar but functional.
-    let icon = app.default_window_icon()
-        .cloned()
-        .unwrap_or_else(|| Image::from_bytes(&[]).expect("empty icon fallback"));
+    // app.default_window_icon() returns Option<&Image> — clone it for the tray.
+    // If no icon is configured (shouldn't happen — tauri.conf.json always ships
+    // icons), return early gracefully rather than crashing.
+    let icon = match app.default_window_icon() {
+        Some(i) => i.clone(),
+        None => {
+            log::warn!("No default window icon found — tray icon will be empty");
+            return Ok(());
+        }
+    };
 
     // ── Build the tray ─────────────────────────────────────────────────────
     let app_handle = app.clone();
