@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0] — 2026-04-14
+
+### Added
+- **Esc to close** — dismiss the window instantly without touching the keyboard shortcut
+- **Space Grotesk font** — loaded via Google Fonts, replaces system monospace
+
+### Changed
+- **Frosted glass UI** — `backdrop-filter: blur(40px) saturate(180%)` over a transparent window; white glass with layered box-shadow bevel
+- **Native window** — `titleBarStyle: hiddenInset` + traffic lights pushed off-screen (`-100,-100`); proper macOS shadow and rounded corners, no fake border-radius hack
+- **Transparent Electron window** — `transparent: true` + `vibrancy: under-window` so the blur actually sees through to the desktop
+- **Larger line-height** — 1.80, 22px Space Grotesk, `letter-spacing: -0.015em`
+- **Cleaner footer** — glass-tinted, thinner divider
+
+---
+
 ## [1.3.0] — 2026-04-14
 
 ### Changed
@@ -57,6 +72,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - GitHub Actions CI — builds `arm64` + `x64` `.dmg` on tag push
 - MIT license
 
+[1.4.0]: https://github.com/paulfxyz/junk/releases/tag/v1.4.0
 [1.3.0]: https://github.com/paulfxyz/junk/releases/tag/v1.3.0
 [1.2.0]: https://github.com/paulfxyz/junk/releases/tag/v1.2.0
 [1.1.0]: https://github.com/paulfxyz/junk/releases/tag/v1.1.0
