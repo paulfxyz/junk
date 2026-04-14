@@ -33,9 +33,9 @@
 // Silence the console window that Windows would normally open for a GUI app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{AppHandle, Manager, RunEvent, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_autostart::ManagerExt as AutostartExt;
+use tauri_plugin_autostart::ManagerExt as AutostartExt; // provides .autostart_manager() on AppHandle
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 // ── Preferences types ─────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ fn open_prefs(app: AppHandle) -> Result<(), String> {
     // `emit_to` targets only the "main" window — no broadcast needed.
     window
         .emit("open-prefs", ())
-        .map_err(|e| e.to_string())
+        .map_err(|e: tauri::Error| e.to_string())
 }
 
 /// Return the current preference values to the frontend.
@@ -106,8 +106,10 @@ fn get_prefs(app: AppHandle) -> Result<Prefs, String> {
     // Query the autostart plugin for the current login item state.
     // is_enabled() reads from the OS (LaunchAgent plist / registry / .desktop)
     // so it reflects the real state, not a cached value.
+    // `.autolaunch()` is provided by tauri_plugin_autostart::ManagerExt (aliased as AutostartExt).
+    // It returns the plugin's AutoLaunch manager from which we can query / toggle the login item.
     let launch_at_login = app
-        .autostart_manager()
+        .autolaunch()
         .is_enabled()
         .unwrap_or(false); // If the query fails, assume disabled — safe default.
 
@@ -124,7 +126,8 @@ fn get_prefs(app: AppHandle) -> Result<Prefs, String> {
 /// On Linux: creates ~/.config/autostart/junk.desktop.
 #[tauri::command]
 fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mgr = app.autostart_manager();
+    // Same pattern — get the AutoLaunch manager via the ManagerExt trait.
+    let mgr = app.autolaunch();
     if enabled {
         mgr.enable().map_err(|e| {
             log::error!("autostart enable failed: {e}");
