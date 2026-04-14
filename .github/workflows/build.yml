@@ -318,6 +318,10 @@ jobs:
           fi
 
           # Create the release with all files in dist/
+          # Collect all files from dist/ into a flat list
+          RELEASE_FILES=$(find dist/ -type f | sort | tr '\n' ' ')
+          echo "Release files: $RELEASE_FILES"
+
           gh release create "$TAG" \
             --title "Junk $TAG" \
             --notes "## What's new
@@ -335,4 +339,4 @@ jobs:
           - **Linux (deb)**: \`sudo dpkg -i junk_*.deb\`
 
           Built with [Tauri v2](https://v2.tauri.app) + Rust." \
-            dist/**/*
+            $RELEASE_FILES
