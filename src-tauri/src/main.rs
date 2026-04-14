@@ -4,21 +4,26 @@
 // Architecture overview
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// ┌─────────────────────────────────────────────────────────────┐
-// │  OS Global Shortcut                                         │
-// │  (⌘J / Ctrl+J)                                             │
-// │         │                                                   │
-// │         ▼                                                   │
-// │  tauri_plugin_global_shortcut callback                      │
-// │         │                                                   │
-// │         ├─ window.is_visible()? → true  → window.hide()    │
-// │         └─ window.is_visible()? → false → window.show()    │
-// │                                         + window.set_focus()│
-// │                                                             │
-// │  Frontend (index.html)                                      │
-// │    Esc key → invoke("hide_window")                          │
-// │    ⌘J/Ctrl+J → invoke("hide_window")  (belt-and-suspenders)│
-// └─────────────────────────────────────────────────────────────┘
+// ┌──────────────────────────────────────────────────────────────────────────┐
+// │  OS Global Shortcuts (registered at OS level — bypass WebView entirely)  │
+// │                                                                          │
+// │  ⌘J / Ctrl+J  → toggle_window()  — show or hide the scratchpad          │
+// │  Escape        → hide_if_visible() — always dismiss (v2.2.0 fix)         │
+// │                                                                          │
+// │  tauri_plugin_global_shortcut callback                                   │
+// │         │                                                                │
+// │         ├─ ⌘J/Ctrl+J: is_visible()? → true  → window.hide()            │
+// │         │              is_visible()? → false → window.show()+set_focus() │
+// │         └─ Esc:        is_visible()? → true  → window.hide()            │
+// │                        is_visible()? → false → (no-op, already hidden)  │
+// │                                                                          │
+// │  Frontend (index.html) — belt-and-suspenders JS fallback                 │
+// │    Esc key   → invoke("hide_window")  (may be unreliable — see v2.2.0)  │
+// │    ⌘J/Ctrl+J → invoke("hide_window")  (belt-and-suspenders)             │
+// │                                                                          │
+// │  v2.2.0 fix: Esc is now a true OS-level global shortcut — it fires even │
+// │  when the WebView has consumed the event or JS hasn't loaded yet.        │
+// └──────────────────────────────────────────────────────────────────────────┘
 //
 // Why no unwrap() in production paths?
 // Tauri window operations return Result. In a global-shortcut callback there
@@ -138,7 +143,7 @@ fn show_and_focus(window: &WebviewWindow) {
 
 // ── Global shortcut registration ──────────────────────────────────────────────
 
-/// Register the platform-correct global shortcut with the OS.
+/// Register the platform-correct global shortcut (⌘J / Ctrl+J) with the OS.
 ///
 /// Why register after the app is built rather than in a setup hook?
 /// Tauri v2's shortcut plugin requires the app to be fully initialised
@@ -198,6 +203,84 @@ fn register_global_shortcut(app: &AppHandle) -> Result<(), String> {
         })
         .map_err(|e| {
             log::error!("Failed to register global shortcut CmdOrCtrl+J: {e}");
+            e.to_string()
+        })
+}
+
+/// Register the Escape key as an OS-level global shortcut to hide the window.
+///
+/// v2.2.0 fix: Esc was previously handled only in JS (index.html, keydown
+/// listener with `{ capture: true }`). That approach is unreliable because:
+///
+///   1. `-webkit-app-region: drag` on the window div can swallow keyboard
+///      events at the compositor level before they reach the WebView's JS.
+///   2. In Tauri v2 with `<script type="module">`, the IPC bridge
+///      (`window.__TAURI__.core`) is injected asynchronously — if the user
+///      presses Esc before the module finishes loading, `invoke` is undefined
+///      and the call silently fails.
+///   3. Some OS-level focus states (e.g. immediately after a global shortcut
+///      summons the window) leave the WebView in a state where it does not
+///      receive key events reliably.
+///
+/// By registering Esc as an OS global shortcut in Rust we bypass the WebView
+/// entirely. The OS delivers the event directly to our callback, which then
+/// calls `window.hide()` through the Tauri Rust API — no JS involved.
+///
+/// Conflict risk: Escape without modifiers is a "hot" key. However, the OS
+/// routes the event to the currently focused application first, and global
+/// shortcuts only intercept if no other handler consumed it — in practice
+/// bare-Escape conflicts are extremely rare at the global-shortcut level.
+/// We also guard on `is_visible()` so if Junk is already hidden we no-op,
+/// making any stray event completely harmless.
+///
+/// Returns an error string if registration fails (non-fatal — caller logs and
+/// falls back to the JS handler in index.html).
+fn register_esc_shortcut(app: &AppHandle) -> Result<(), String> {
+    // `None` modifier means "no modifier key required" — plain Escape.
+    // This is the correct choice: we want a bare Esc press, not ⌘Esc or Ctrl+Esc.
+    let esc_shortcut = Shortcut::new(None, Code::Escape);
+
+    // Clone the handle so it can be moved into the 'static closure required
+    // by on_shortcut().
+    let app_handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(esc_shortcut, move |_app, _shortcut, event| {
+            // Only act on the key-down phase to avoid double-firing on key-up.
+            if event.state != ShortcutState::Pressed {
+                return;
+            }
+
+            // Retrieve the window. If it doesn't exist (shouldn't happen in
+            // normal operation) we log and bail — never panic in a callback.
+            let Some(window) = app_handle.get_webview_window("main") else {
+                log::error!("Esc shortcut: 'main' window not found");
+                return;
+            };
+
+            // Only hide if the window is actually visible.
+            // If it's already hidden, a stray Esc from another context would
+            // cause a no-op hide() — harmless but noisy in logs. We skip it.
+            match window.is_visible() {
+                Ok(true) => {
+                    log::debug!("Esc pressed — hiding window");
+                    if let Err(e) = window.hide() {
+                        log::error!("Esc shortcut: hide() failed: {e}");
+                    }
+                }
+                Ok(false) => {
+                    // Window already hidden — silent no-op.
+                    // This fires if the user presses Esc in another app while
+                    // Junk is in the background. We intentionally do nothing.
+                }
+                Err(e) => {
+                    // is_visible() itself failed — stale handle? Log and ignore.
+                    log::warn!("Esc shortcut: is_visible() error: {e}");
+                }
+            }
+        })
+        .map_err(|e| {
+            log::error!("Failed to register Esc global shortcut: {e}");
             e.to_string()
         })
 }
@@ -268,7 +351,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             set_macos_activation_policy(handle);
 
-            // ── Register CmdOrCtrl+J ──────────────────────────────────────
+            // ── Register ⌘J / Ctrl+J ─────────────────────────────────────
             // Errors here are non-fatal — the user can still type in Junk,
             // they just can't summon it with the shortcut. We log and continue
             // rather than aborting the app startup.
@@ -277,13 +360,24 @@ fn main() {
                 log::warn!("Another app may already own CmdOrCtrl+J.");
             }
 
-            log::info!("Setup complete. Junk is ready.");
+            // ── Register Esc (v2.2.0 fix) ─────────────────────────────────
+            // Register Escape as an OS-level shortcut so it reliably hides
+            // the window regardless of WebView focus or JS module load state.
+            // See `register_esc_shortcut` doc comment for full rationale.
+            // Non-fatal: if registration fails we fall back to the JS handler
+            // in index.html (belt-and-suspenders, may be unreliable).
+            if let Err(e) = register_esc_shortcut(handle) {
+                log::warn!("Could not register Esc shortcut: {e}");
+                log::warn!("Esc dismiss will fall back to JS handler.");
+            }
+
+            log::info!("Setup complete. Junk v2.2.0 is ready.");
             Ok(())
         })
         // ── IPC commands ──────────────────────────────────────────────────────
         // Register every Rust function the frontend can invoke(). Any function
         // decorated with #[tauri::command] must appear here or Tauri will
-        // return an error when JS calls invoke().
+        // return an error when JS calls invoke()..
         .invoke_handler(tauri::generate_handler![hide_window])
         // ── Run ───────────────────────────────────────────────────────────────
         // generate_context!() reads tauri.conf.json at compile time and embeds

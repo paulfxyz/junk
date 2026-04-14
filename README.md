@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.1.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.2.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -47,7 +47,7 @@ Junk is that place.
 | Feature | Details |
 |---|---|
 | **⌘J / Ctrl+J** | Global hotkey — works in any app, any macOS Space, any virtual desktop |
-| **Esc** | Hides the window from inside the scratchpad |
+| **Esc** | Hides the window — OS-level shortcut (v2.2.0), works even before JS loads |
 | **Auto-save** | Content persists to `localStorage` with a 300 ms debounce — zero data loss |
 | **Frosted glass UI** | `backdrop-filter: blur(40px) saturate(180%)` — beautiful on any wallpaper |
 | **Always on top** | Floats above all other windows so it's always reachable |
@@ -68,7 +68,7 @@ Junk is that place.
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.1.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.2.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -86,7 +86,7 @@ Junk is that place.
 
 ### Windows
 
-1. Download **`Junk_2.1.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.2.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    **Why SmartScreen?** The binary is not code-signed with a Windows Extended Validation (EV) certificate ($200–500/yr). SmartScreen flags all unsigned binaries. The source code is fully public — if you prefer, build it yourself (instructions below).
@@ -94,10 +94,10 @@ Junk is that place.
 3. Junk launches on login and disappears into the background.
 4. Press **Ctrl+J** from any application.
 
-Alternatively, download the **MSI** (`Junk_2.1.0_x64_en-US.msi`) for enterprise/silent deployment:
+Alternatively, download the **MSI** (`Junk_2.2.0_x64_en-US.msi`) for enterprise/silent deployment:
 
 ```
-msiexec /i Junk_2.1.0_x64_en-US.msi /quiet
+msiexec /i Junk_2.2.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -106,13 +106,13 @@ msiexec /i Junk_2.1.0_x64_en-US.msi /quiet
 
 ```sh
 # Download
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.1.0_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.0_amd64.AppImage
 
 # Make executable
-chmod +x Junk_2.1.0_amd64.AppImage
+chmod +x Junk_2.2.0_amd64.AppImage
 
 # Run
-./Junk_2.1.0_amd64.AppImage
+./Junk_2.2.0_amd64.AppImage
 ```
 
 AppImages are portable — they run on any modern x86_64 Linux distribution without installation. No sudo required.
@@ -125,8 +125,8 @@ AppImages are portable — they run on any modern x86_64 Linux distribution with
 
 ```sh
 # Download and install
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.1.0_amd64.deb
-sudo dpkg -i Junk_2.1.0_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.2.0_amd64.deb
+sudo dpkg -i Junk_2.2.0_amd64.deb
 
 # Run
 junk
@@ -281,9 +281,17 @@ The Rust/Tauri rewrite ships as a single ~4 MB binary with no external runtime. 
 
 ---
 
-### Global Shortcut
+### Global Shortcuts
 
-The **⌘J / Ctrl+J** shortcut is registered at the OS level using [`tauri-plugin-global-shortcut`](https://v2.tauri.app/plugin/global-shortcut/), which calls platform-native APIs:
+Two shortcuts are registered at the OS level using [`tauri-plugin-global-shortcut`](https://v2.tauri.app/plugin/global-shortcut/):
+
+| Shortcut | Platform | Behaviour |
+|---|---|---|
+| **⌘J** | macOS | Toggle window (show/hide) |
+| **Ctrl+J** | Windows / Linux | Toggle window (show/hide) |
+| **Escape** | All | Hide window (v2.2.0 fix) |
+
+Both shortcuts use platform-native APIs:
 
 | Platform | API |
 |---|---|
@@ -357,9 +365,9 @@ JS frontend
 
 `AppHandle` is dependency-injected by Tauri's `invoke_handler` — no arguments flow from JS. The command is registered in `tauri::generate_handler![hide_window]` and permitted in `capabilities/default.json`.
 
-Two JS code paths call `hide_window`:
-1. The **Esc** key listener (primary dismiss)
-2. The **in-window ⌘J / Ctrl+J** listener (belt-and-suspenders — handles the edge case where the shortcut fires while the window already has focus)
+Two JS code paths call `hide_window` as a belt-and-suspenders fallback:
+1. The **Esc** key listener (JS fallback — the primary Esc handler is the OS-level shortcut registered in Rust since v2.2.0)
+2. The **in-window ⌘J / Ctrl+J** listener (handles the edge case where the shortcut fires while the window already has focus)
 
 ---
 
@@ -464,19 +472,19 @@ junk/
 Every push to a `v*` tag triggers the GitHub Actions workflow:
 
 ```
-Tag pushed (e.g. v2.1.0)
+Tag pushed (e.g. v2.2.0)
         │
         ├─ [macOS runner]    cargo tauri build --target universal-apple-darwin
         │                    ad-hoc codesign (xattr-removable)
-        │                    → Junk_2.1.0_universal.dmg
+        │                    → Junk_2.2.0_universal.dmg
         │
         ├─ [Windows runner]  cargo tauri build
-        │                    → Junk_2.1.0_x64-setup.exe
-        │                    → Junk_2.1.0_x64_en-US.msi
+        │                    → Junk_2.2.0_x64-setup.exe
+        │                    → Junk_2.2.0_x64_en-US.msi
         │
         └─ [Ubuntu runner]   cargo tauri build
-                             → Junk_2.1.0_amd64.AppImage
-                             → Junk_2.1.0_amd64.deb
+                             → Junk_2.2.0_amd64.AppImage
+                             → Junk_2.2.0_amd64.deb
                                       │
                                       ▼
                              All artifacts uploaded to GitHub Release
@@ -488,6 +496,11 @@ The release job uses `find dist/ -type f` (not glob patterns) to enumerate artif
 ---
 
 ## Changelog
+
+### v2.2.0 — 2026-04-14
+- **Fix:** Esc key now reliably dismisses the window on all platforms — registered as an OS-level global shortcut in Rust (`register_esc_shortcut()`), bypassing the WebView entirely. Previously, Esc was handled only in JS which was unreliable due to `-webkit-app-region: drag` compositor interception and async module load timing
+- **Architecture:** Two OS-level shortcuts now registered: ⌘J/Ctrl+J (toggle) + Escape (hide). JS handlers remain as belt-and-suspenders fallback
+- **Improvement:** Bumped versions across all manifests: `Cargo.toml`, `tauri.conf.json`, `package.json`
 
 ### v2.1.0 — 2026-04-14
 - **Fix:** ⌘J global shortcut now works correctly on macOS — the modifier is now platform-conditional (`Modifiers::SUPER` on macOS, `Modifiers::CONTROL` on Windows/Linux) instead of the previous combined `SUPER | CONTROL` which required both keys simultaneously
