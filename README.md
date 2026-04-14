@@ -1163,11 +1163,9 @@ Pull requests are welcome. A few conventions before opening one:
 
 ---
 
-## Built with Perplexity Computer
+## Vibe coded 🤙
 
-This app — from the Rust rewrite to the landing page to this README — was built using [Perplexity Computer](https://www.perplexity.ai/computer), an AI agent that writes production-quality code, reasons about architecture, and explains every decision inline.
-
-Every comment in `main.rs` is part of the output. The architecture deep-dives above, the trade-off tables, the hard-won lessons, the FAQ — all generated and iterated through conversation. The debugging sessions that found the `withGlobalTauri` root cause and the three-layer drag fix were done entirely through this toolchain.
+This app was built entirely through vibe coding using various AI tools — Rust backend, frontend, CI pipeline, landing page, and this README included. No prior Tauri or Rust experience required. It works, it ships, and the code is thoroughly commented. But it is what it is.
 
 ---
 
