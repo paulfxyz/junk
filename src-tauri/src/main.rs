@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Junk — a global-hotkey scratchpad built with Tauri v2
 //
-// Architecture overview (v2.3.0)
+// Architecture overview (v2.4.0)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
@@ -11,7 +11,7 @@
 // │  Escape        → hide_if_visible()     — always dismiss (v2.2.0)         │
 // │  ⌘, / Ctrl+,  → show_prefs_in_window() — open preferences panel         │
 // │                                                                          │
-// │  Window lifecycle (v2.3.0 — persistent process)                          │
+// │  Window lifecycle (v2.4.0 — persistent process)                          │
 // │    close button → hide()   (never quits — stays in background)           │
 // │    ⌘Q          → hide()   (macOS: intercept quit, hide instead)          │
 // │    The process lives forever once launched. Login item keeps it alive     │
@@ -161,7 +161,7 @@ fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
 #[tauri::command]
 fn check_for_update(app: AppHandle) -> Result<serde_json::Value, String> {
     // The current version is embedded at compile time from Cargo.toml.
-    // format: "2.3.0" (no "v" prefix).
+    // format: "2.4.0" (no "v" prefix).
     let current = env!("CARGO_PKG_VERSION");
 
     // GitHub releases API — returns JSON array, latest release is first.
@@ -388,7 +388,7 @@ fn main() {
                 log::warn!("Prefs shortcut (⌘,) registration failed: {e}");
             }
 
-            log::info!("Setup complete. Junk v2.3.0 is ready.");
+            log::info!("Setup complete. Junk v2.4.0 is ready.");
             Ok(())
         })
         // ── IPC commands ──────────────────────────────────────────────────────
@@ -400,7 +400,7 @@ fn main() {
             check_for_update,
         ])
         // ── Persistent process — intercept close/quit events ──────────────────
-        // v2.3.0: Junk is now a persistent background process.
+        // v2.4.0: Junk is now a persistent background process.
         //
         // Without this hook, closing the window (clicking X, or ⌘W) would
         // exit the process and lose the global shortcut registration. With

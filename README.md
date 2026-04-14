@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.3.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.4.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -66,6 +66,8 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 | **No Dock icon** | macOS `Accessory` activation policy — stays invisible between uses |
 | **No Taskbar icon** | `skipTaskbar: true` on Windows/Linux — same philosophy |
 | **No blur-hide** | Window stays visible when you click another app (critical for clipboard workflows) |
+| **Drag handle** | Footer six-dot pill — hold and drag to reposition Junk anywhere on screen |
+| **No alwaysOnTop** | Other apps' modals and dialogs appear above Junk naturally (v2.4.0) |
 | **Fly-in animation** | 180 ms spring easing — appears with intention, not a pop |
 | **Universal binary** | macOS: native Apple Silicon + Intel in a single `.dmg` |
 | **Tiny footprint** | ~18 MB RAM, ~4 MB installer — versus 130 MB / 160 MB for the old Electron version |
@@ -154,7 +156,7 @@ junk
 | **Esc** | Hide the window (or close Preferences if open) |
 | **⌘,** (macOS) | Open Preferences panel |
 | **Ctrl+,** (Windows / Linux) | Open Preferences panel |
-| Click and drag anywhere | Move the window — the entire surface is a drag handle |
+| Drag the **⠿** pill (footer center) | Move the window — hold and drag the footer handle to reposition |
 | **⌘A** / **Ctrl+A** | Select all text |
 | **⌘V** / **Ctrl+V** | Paste — works even without clicking the textarea first |
 | **⌘Z** / **Ctrl+Z** | Undo — full undo history survives hide/show cycles |
@@ -1025,6 +1027,12 @@ A: No. One window, one scratchpad. This is a design constraint, not a technical 
 ---
 
 ## Changelog
+
+### v2.4.0 — 2026-04-14
+- **Fix:** Removed `alwaysOnTop: true` — other apps' modals, alerts, and dialogs can now appear above Junk as expected
+- **Feature:** Footer drag handle — a centered six-dot pill (⠿) in the footer bar is now the dedicated window-move region. Hold and drag it to reposition Junk anywhere on screen
+- **Architecture:** `‑webkit‑app‑region: drag` removed from the entire `.window` element. The footer drag handle is now the **only** drag region in the app — prevents accidental drags when clicking the content area
+- **Improvement:** Window `center: true` on first launch — Junk opens centered, then remembers where you dragged it for the session
 
 ### v2.3.0 — 2026-04-14
 - **Feature:** Persistent process — `CloseRequested` and `ExitRequested` events now call `window.hide()` instead of quitting. The process lives indefinitely so the global shortcut is always registered. This is the same architecture used by Alfred, Paste, and Magnet.
