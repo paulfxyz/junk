@@ -1,6 +1,6 @@
 {
   "name": "junk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A flying scratchpad for macOS. Hit CMD+J, type, paste, think. Gone when you're done.",
   "main": "src/main.js",
   "author": "Paul Fleury <hello@paulfleury.com>",

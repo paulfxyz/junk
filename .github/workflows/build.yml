@@ -10,93 +10,184 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build macOS DMG
-    runs-on: macos-14        # Apple Silicon (M1) runner
+  build-arm64:
+    name: Build arm64 DMG
+    runs-on: macos-14
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build ICNS from iconset
+      - name: Build ICNS
         run: iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build app (unsigned)
+      - name: Build unpacked .app (arm64)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
-        # Build to directory first so we can ad-hoc sign the .app,
-        # then package into DMG manually
         run: |
-          # Step 1: build unpacked .app for each arch
-          npx electron-builder --mac dir --arm64 --config.mac.identity=null
-          npx electron-builder --mac dir --x64  --config.mac.identity=null
+          npx electron-builder --mac dir --arm64 \
+            --config.mac.identity=null \
+            --config.mac.gatekeeperAssess=false
 
-          echo "--- built app dirs ---"
-          find dist -name "*.app" -maxdepth 3 | head -10
-
-      - name: Ad-hoc sign .app bundles
+      - name: Ad-hoc sign all binaries in .app
         run: |
-          # Ad-hoc sign (-) satisfies Gatekeeper's basic check on recent macOS
-          # This prevents the "app is damaged" error. Users still right-click → Open once.
-          for app in dist/mac-arm64/*.app dist/mac/*.app dist/mac-x64/*.app; do
-            if [ -d "$app" ]; then
-              echo "Signing $app"
-              codesign --force --deep --sign - --options runtime "$app"
-              echo "Verified: $(codesign --verify --verbose "$app" 2>&1 | head -2)"
-            fi
+          APP=$(find dist/mac-arm64 -name "*.app" -maxdepth 1 | head -1)
+          echo "Signing: $APP"
+
+          # Sign every binary/dylib/framework inside first (leaves → root)
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
           done
 
-      - name: Package into DMG
+          # Sign all frameworks
+          find "$APP" -name "*.framework" | while read f; do
+            codesign --force --deep --sign - "$f" 2>/dev/null || true
+          done
+
+          # Sign the .app itself — deep, ad-hoc, no entitlements
+          codesign --force --deep --sign - \
+            --options runtime \
+            --timestamp=none \
+            "$APP"
+
+          echo "Result: $(codesign -dv "$APP" 2>&1 | head -5)"
+
+      - name: Package into DMG (arm64)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
         run: |
-          # Now package the already-signed .app into DMG
-          npx electron-builder --mac dmg --arm64 --config.mac.identity=null --config.mac.sign=false
-          npx electron-builder --mac dmg --x64  --config.mac.identity=null --config.mac.sign=false
+          npx electron-builder --mac dmg --arm64 \
+            --config.mac.identity=null \
+            --config.mac.gatekeeperAssess=false \
+            --config.dmg.writeUpdateInfo=false
 
-      - name: List output
+      - name: Verify DMG
         run: ls -lh dist/*.dmg
 
-      - name: Upload DMG artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: junk-dmg
-          path: dist/*.dmg
-          if-no-files-found: error
+          name: dmg-arm64
+          path: dist/*arm64.dmg
+
+  build-x64:
+    name: Build x64 DMG
+    runs-on: macos-13    # Intel runner for x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build ICNS
+        run: iconutil -c icns assets/icon.iconset -o assets/icon.icns
+
+      - name: Build unpacked .app (x64)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
+        run: |
+          npx electron-builder --mac dir --x64 \
+            --config.mac.identity=null \
+            --config.mac.gatekeeperAssess=false
+
+      - name: Ad-hoc sign all binaries in .app
+        run: |
+          APP=$(find dist/mac -name "*.app" -maxdepth 1 | head -1)
+          [ -z "$APP" ] && APP=$(find dist/mac-x64 -name "*.app" -maxdepth 1 | head -1)
+          echo "Signing: $APP"
+
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
+          done
+
+          find "$APP" -name "*.framework" | while read f; do
+            codesign --force --deep --sign - "$f" 2>/dev/null || true
+          done
+
+          codesign --force --deep --sign - \
+            --options runtime \
+            --timestamp=none \
+            "$APP"
+
+          echo "Result: $(codesign -dv "$APP" 2>&1 | head -5)"
+
+      - name: Package into DMG (x64)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
+        run: |
+          npx electron-builder --mac dmg --x64 \
+            --config.mac.identity=null \
+            --config.mac.gatekeeperAssess=false \
+            --config.dmg.writeUpdateInfo=false
+
+      - name: Verify DMG
+        run: ls -lh dist/*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-x64
+          path: |
+            dist/*.dmg
+            !dist/*arm64.dmg
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-arm64, build-x64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download arm64 DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: dmg-arm64
+          path: dist
+
+      - name: Download x64 DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: dmg-x64
+          path: dist
+
+      - name: List assets
+        run: ls -lh dist/
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           name: Junk ${{ github.ref_name }}
           body: |
             ## Junk ${{ github.ref_name }}
 
-            A flying macOS scratchpad. Hit **⌘J** anywhere, type or paste, hit **Esc** to dismiss.
+            A flying macOS scratchpad. Hit **⌘J** from anywhere, type or paste, hit **Esc** to dismiss.
 
             ### Install
             1. Download the `.dmg` for your Mac:
                - **Apple Silicon (M1/M2/M3/M4):** `Junk-*-arm64.dmg`
                - **Intel Mac:** `Junk-*-x64.dmg`
-            2. Open the `.dmg`, drag **Junk.app** to `/Applications`
-            3. First launch — right-click → **Open** → **Open** (Gatekeeper bypass, unsigned app)
-
-            Or strip the quarantine flag via Terminal:
+            2. Open the `.dmg` → drag **Junk.app** to `/Applications`
+            3. First launch — strip the quarantine flag:
             ```bash
             xattr -rd com.apple.quarantine /Applications/Junk.app
+            open /Applications/Junk.app
             ```
+            Or: right-click → **Open** → **Open**
+
+            > App is ad-hoc signed (not notarized). Privacy & Security will show an **Open Anyway** button after the first blocked launch.
           files: dist/*.dmg
           draft: false
           prerelease: false

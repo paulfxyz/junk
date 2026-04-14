@@ -15,7 +15,7 @@
 ╚══════════════════════════════════════════════════════════╝
 ```
 
-[![Version](https://img.shields.io/badge/version-1.1.0-4F98A3?style=flat-square&labelColor=12110e)](https://github.com/paulfxyz/junk/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.2.0-4F98A3?style=flat-square&labelColor=12110e)](https://github.com/paulfxyz/junk/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS-000000?style=flat-square)](https://github.com/paulfxyz/junk/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-white?style=flat-square)](LICENSE)
 [![Built with Electron](https://img.shields.io/badge/built_with-Electron-47848F?style=flat-square&logo=electron&logoColor=white)](https://electronjs.org)
@@ -78,8 +78,8 @@ Junk is `⌘J`. It's there in 160ms. You dump the thing. You hit `Esc`. It's gon
 
 1. Go to [**Releases**](https://github.com/paulfxyz/junk/releases/latest)
 2. Download the right `.dmg` for your Mac:
-   - **Apple Silicon (M1 / M2 / M3 / M4)** → `Junk-1.1.0-arm64.dmg`
-   - **Intel Mac** → `Junk-1.1.0-x64.dmg`
+   - **Apple Silicon (M1 / M2 / M3 / M4)** → `Junk-1.2.0-arm64.dmg`
+   - **Intel Mac** → `Junk-1.2.0-x64.dmg`
 3. Open the `.dmg` → drag **Junk.app** to `/Applications`
 4. First launch — strip the quarantine flag:
 
@@ -126,8 +126,8 @@ npm start
 
 # Build DMG
 npm run build
-# → dist/Junk-1.1.0-arm64.dmg
-# → dist/Junk-1.1.0-x64.dmg
+# → dist/Junk-1.2.0-arm64.dmg
+# → dist/Junk-1.2.0-x64.dmg
 ```
 
 ---
