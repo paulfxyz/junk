@@ -1,21 +1,20 @@
 /* ─────────────────────────────────────────────────────
-   Junk — macOS floating scratchpad
-   Design: near-black glass, large warm type, no clutter
+   Junk — floating scratchpad
+   No chrome. No buttons. Just text.
    ───────────────────────────────────────────────────── */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:          rgba(18, 17, 15, 0.82);   /* near-black, slightly warm */
-  --surface:     rgba(28, 27, 25, 0.90);
-  --border:      rgba(255, 255, 255, 0.08);
-  --text:        #DDDBD5;                   /* warm off-white */
-  --text-muted:  rgba(221, 219, 213, 0.35);
-  --accent:      #4F98A3;                   /* teal */
-  --radius:      16px;
-  --font-stack:  -apple-system, 'SF Pro Display', 'SF Pro Text',
-                 'Helvetica Neue', sans-serif;
-  --font-mono:   'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  --bg:         rgba(16, 15, 13, 0.88);
+  --border:     rgba(255, 255, 255, 0.07);
+  --text:       #DDDBD5;
+  --text-muted: rgba(221, 219, 213, 0.30);
+  --accent:     #4F98A3;
+  --radius:     18px;
+  --font-mono:  ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code',
+                'JetBrains Mono', 'Menlo', monospace;
+  --font-ui:    -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
 }
 
 html, body {
@@ -24,10 +23,9 @@ html, body {
   background: transparent;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Window shell ── */
+/* ── Outer shell — the entire draggable surface ── */
 .window {
   width: 100vw;
   height: 100vh;
@@ -37,65 +35,22 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  /* Entire window is draggable — textarea overrides this */
+  -webkit-app-region: drag;
 
-  /* Entry animation — fly in from slightly above */
-  animation: flyIn 160ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: flyIn 180ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
 @keyframes flyIn {
-  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)     scale(1);    }
+  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
 }
 
-/* ── Title bar ── */
-.titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px 10px;
-  -webkit-app-region: drag;   /* make it draggable */
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.label {
-  font-family: var(--font-stack);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: lowercase;
-  color: var(--text-muted);
-  user-select: none;
-}
-
-.close-btn {
-  -webkit-app-region: no-drag;  /* button must NOT be a drag target */
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  border-radius: 50%;
-  width: 26px;
-  height: 26px;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 120ms, border-color 120ms, background 120ms;
-}
-
-.close-btn:hover {
-  color: var(--text);
-  border-color: rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.06);
-}
-
-/* ── Scratchpad textarea ── */
+/* ── The textarea — the whole point ── */
 .pad {
   flex: 1;
   width: 100%;
-  padding: 28px 32px;
+  padding: 32px 36px 20px;
   background: transparent;
   border: none;
   outline: none;
@@ -103,56 +58,57 @@ html, body {
   color: var(--text);
   caret-color: var(--accent);
 
-  /* Large, warm, monospaced feel — comfortable for dumping thoughts */
   font-family: var(--font-mono);
-  font-size: 22px;
-  line-height: 1.65;
+  font-size: 21px;
+  line-height: 1.7;
   letter-spacing: 0.01em;
 
-  /* Custom scrollbar */
+  /* Textarea must NOT be a drag region */
+  -webkit-app-region: no-drag;
+
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  scrollbar-color: rgba(255,255,255,0.10) transparent;
 }
 
-.pad::-webkit-scrollbar         { width: 4px; }
+.pad::-webkit-scrollbar         { width: 3px; }
 .pad::-webkit-scrollbar-track   { background: transparent; }
-.pad::-webkit-scrollbar-thumb   { background: rgba(255,255,255,0.12); border-radius: 99px; }
-.pad::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+.pad::-webkit-scrollbar-thumb   { background: rgba(255,255,255,0.10); border-radius: 99px; }
+.pad::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
 
 .pad::placeholder {
   color: var(--text-muted);
   font-style: italic;
 }
 
-/* Selection highlight */
 .pad::selection {
-  background: rgba(79, 152, 163, 0.35);
+  background: rgba(79, 152, 163, 0.30);
   color: var(--text);
 }
 
-/* ── Footer ── */
+/* ── Footer — just a faint hint ── */
 .footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px 12px;
+  padding: 7px 24px 10px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .hint {
-  font-family: var(--font-stack);
+  font-family: var(--font-ui);
   font-size: 11px;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   user-select: none;
 }
 
 kbd {
   font-family: var(--font-mono);
   font-size: 10px;
-  background: rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.06);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;

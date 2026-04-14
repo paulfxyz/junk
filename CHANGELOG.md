@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] — 2026-04-14
+
+### Changed
+- **No tray icon** — removed entirely. Junk is now a pure invisible background process. No menu bar presence whatsoever
+- **Window no longer hides on blur** — switching to another app, copying text, running a clipboard action and coming back no longer dismisses the window. Only `⌘J` toggles it
+- **No title bar, no fake traffic lights** — completely frameless floating modal. No close button, no drag handle header. The entire window border is the drag region; the textarea is not
+- **Cleaner UI** — removed title bar and `×` button entirely. Just the textarea + a faint footer hint
+- **Smaller, tighter footer** — single line: `⌘J toggle · content auto-saved`
+- **Rounder corners** — 18px radius for a softer floating feel
+
+---
+
 ## [1.2.0] — 2026-04-14
 
 ### Fixed
@@ -45,6 +57,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - GitHub Actions CI — builds `arm64` + `x64` `.dmg` on tag push
 - MIT license
 
+[1.3.0]: https://github.com/paulfxyz/junk/releases/tag/v1.3.0
 [1.2.0]: https://github.com/paulfxyz/junk/releases/tag/v1.2.0
 [1.1.0]: https://github.com/paulfxyz/junk/releases/tag/v1.1.0
 [1.0.0]: https://github.com/paulfxyz/junk/releases/tag/v1.0.0

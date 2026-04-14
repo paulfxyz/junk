@@ -9,16 +9,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
   <div class="window">
-
-    <!-- Drag region — grab anywhere on the top bar to move the window -->
-    <div class="titlebar" id="titlebar">
-      <span class="label">junk</span>
-      <button class="close-btn" id="closeBtn" title="Close (Esc)">×</button>
-    </div>
-
-    <!-- The scratchpad -->
     <textarea
       id="pad"
       class="pad"
@@ -28,14 +19,10 @@
       autocorrect="off"
       autocapitalize="off"
     ></textarea>
-
-    <!-- Footer hint -->
     <div class="footer">
-      <span class="hint"><kbd>⌘J</kbd> toggle &nbsp;·&nbsp; <kbd>Esc</kbd> close &nbsp;·&nbsp; content auto-saved</span>
+      <span class="hint"><kbd>⌘J</kbd> toggle &nbsp;·&nbsp; content auto-saved</span>
     </div>
-
   </div>
-
   <script src="renderer.js"></script>
 </body>
 </html>
