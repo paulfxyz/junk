@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v2.7.0)
+  Junk — frontend (v2.7.1)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -1292,7 +1292,9 @@
         // Tauri injection race condition that broke hide_window in v2.2.0.
         const invokeFn = window.__TAURI__?.core?.invoke;
         if (typeof invokeFn === 'function') {
-          invokeFn('start_dragging').catch(() => {
+          // Correct Tauri v2 plugin command: 'plugin:window|start_dragging'
+          // with the window label. invoke('start_dragging') silently fails.
+          invokeFn('plugin:window|start_dragging', { label: 'main' }).catch(() => {
             // Silent failure — worst case the window just doesn't move.
           });
         }
@@ -1334,7 +1336,7 @@
     focusEditor();
     maybeAutoCheckUpdate();
 
-    console.info('[Junk] v2.7.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
+    console.info('[Junk] v2.7.1 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
   </script>
 </body>
 </html>
