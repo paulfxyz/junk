@@ -24,7 +24,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Core Tauri framework — brings in the WebView, IPC, window management, etc.
 # We enable "devtools" so developers can open the inspector in debug builds.
-tauri = { version = "2", features = ["devtools"] }
+# "tray-icon" is a built-in Tauri v2 feature (NOT a separate plugin crate) —
+# it exposes the tauri::tray module with TrayIconBuilder, TrayIconEvent, etc.
+tauri = { version = "2", features = ["devtools", "tray-icon"] }
 
 # Global shortcut plugin (Tauri v2 splits plugins out of core).
 # This replaces the old tauri::GlobalShortcutManager from v1.
@@ -35,12 +37,6 @@ tauri-plugin-global-shortcut = "2"
 # On Windows: writes/removes the HKCU\...\Run registry key.
 # On Linux: creates/removes ~/.config/autostart/<app>.desktop.
 tauri-plugin-autostart = "2"
-
-# System tray / menu bar icon plugin.
-# Provides a persistent icon in the macOS menu bar / Windows system tray /
-# Linux status area. Users can Show/Hide Junk, open Preferences, check for
-# updates, and Quit from here — even when the main window is hidden.
-tauri-plugin-tray = "2"
 
 # HTTP client plugin — allows Rust code to make outbound HTTP requests.
 # Used for the update checker: fetches api.github.com/repos/paulfxyz/junk/releases/latest

@@ -3,7 +3,7 @@
 
   "identifier": "default",
 
-  "description": "Default capability set for Junk v2.5.0. Adds tray icon, HTTP fetch, autostart and event permissions on top of the existing window/shortcut capabilities.",
+  "description": "Default capability set for Junk v2.5.0. Adds HTTP fetch, autostart and event permissions on top of the existing window/shortcut capabilities. Note: system tray (tray-icon feature) is a built-in Tauri feature — no capability entry needed.",
 
   "local": true,
 
@@ -35,8 +35,6 @@
     "autostart:allow-disable",
 
     "autostart:allow-is-enabled",
-
-    "tray-icon:default",
 
     "http:default"
   ]
