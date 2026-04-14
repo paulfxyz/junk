@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v2.5.0)
+  Junk — frontend (v2.6.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -174,14 +174,14 @@
       display: flex;
       flex-direction: column;
 
-      /* v2.4.0: NO whole-window drag.
-         Previously the entire .window was a drag region, which fought with
-         the textarea (clicks could accidentally start a drag) and prevented
-         any other app's modal from appearing above Junk.
-         Drag is now ONLY on the .footer-drag-handle pill at the bottom.
-         All interactive children default to 'no-drag'. */
-      -webkit-app-region: no-drag;
-      app-region: no-drag;
+      /* v2.6.0: Full-window drag region.
+         The entire .window surface is draggable — you can grab Junk from
+         the header, the empty margins around the text area, or the footer.
+         Interactive children (textarea, buttons, links) each override with
+         -webkit-app-region: no-drag so their clicks still register normally.
+         This is the cleanest UX: natural, discoverable, zero JavaScript. */
+      -webkit-app-region: drag;
+      app-region: drag;
 
       /* Fly-in on every show. The animation name is re-triggered in JS by
          removing and re-adding the class — see triggerFlyIn(). */
@@ -210,6 +210,11 @@
       border: none;
       outline: none;
       resize: none;
+
+      /* Must not be a drag region — clicking/selecting text would conflict
+         with the window-drag behaviour set on .window. */
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
 
       font-family: 'Space Grotesk', system-ui, sans-serif;
       font-size: 22px;
@@ -298,72 +303,6 @@
     }
     .footer-prefs-btn:hover {
       color: rgba(26, 26, 46, 0.70);
-    }
-
-    /* ── Footer drag handle (v2.4.0) ──────────────────────────────────────
-       A small centered pill in the footer that is the ONLY drag region.
-
-       Why only the footer?
-         1. The textarea must NOT be draggable — clicks place the cursor.
-         2. The rest of the window is content/chrome — accidental drags
-            would be disorienting.
-         3. The footer is naturally the "title bar equivalent" for a
-            frameless window: users expect to grab the bottom bar to move it.
-
-       The pill uses -webkit-app-region: drag which tells the macOS/Windows
-       compositor to treat pointer-down + move on this element as a native
-       window drag — zero JS required, zero IPC round-trips, buttery smooth.
-
-       The grab cursor telegraphs the affordance clearly.
-    ────────────────────────────────────────────────────────────────────── */
-    .footer-drag-handle {
-      /* Absolute center in the footer flex row */
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.045);
-      border: 1px solid rgba(0, 0, 0, 0.07);
-      cursor: grab;
-      transition: background 140ms ease, border-color 140ms ease;
-      user-select: none;
-      -webkit-user-select: none;
-
-      /* THIS IS THE ONLY DRAG REGION in the entire window */
-      -webkit-app-region: drag;
-      app-region: drag;
-    }
-
-    .footer-drag-handle:hover {
-      background: rgba(0, 0, 0, 0.075);
-      border-color: rgba(0, 0, 0, 0.12);
-    }
-
-    .footer-drag-handle:active {
-      cursor: grabbing;
-      background: rgba(0, 0, 0, 0.10);
-    }
-
-    /* The six-dot grid icon — a universally understood drag affordance */
-    .drag-dots {
-      display: grid;
-      grid-template-columns: repeat(3, 3px);
-      grid-template-rows: repeat(2, 3px);
-      gap: 2px;
-      opacity: 0.35;
-      transition: opacity 140ms ease;
-    }
-
-    .footer-drag-handle:hover .drag-dots {
-      opacity: 0.55;
-    }
-
-    .drag-dot {
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: currentColor;
     }
 
     /* Subtle pulse on the auto-save indicator when content is actively saving */
@@ -692,19 +631,6 @@
         <span>esc close</span>
         <span class="footer-sep">·</span>
         <span id="save-status">auto-saved</span>
-      </div>
-
-      <!--
-        Drag handle pill (v2.4.0)
-        This is the ONLY -webkit-app-region:drag element in the window.
-        Hold and drag to reposition Junk anywhere on screen.
-        The six-dot ⠿ grid is the universal "drag" affordance.
-      -->
-      <div class="footer-drag-handle" title="Hold and drag to move Junk">
-        <div class="drag-dots" aria-hidden="true">
-          <span class="drag-dot"></span><span class="drag-dot"></span><span class="drag-dot"></span>
-          <span class="drag-dot"></span><span class="drag-dot"></span><span class="drag-dot"></span>
-        </div>
       </div>
 
       <!-- Open preferences via the footer button (⌘, also works globally) -->
@@ -1337,7 +1263,7 @@
     focusEditor();
     maybeAutoCheckUpdate();
 
-    console.info('[Junk] v2.5.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
+    console.info('[Junk] v2.6.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
   </script>
 </body>
 </html>

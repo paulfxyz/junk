@@ -1,26 +1,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Junk — a global-hotkey scratchpad built with Tauri v2
 //
-// Architecture overview (v2.5.0)
+// Architecture overview (v2.6.0)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
 // │  OS Global Shortcuts (registered at OS level — bypass WebView entirely)  │
 // │                                                                          │
-// │  ⌘J / Ctrl+J  → toggle_window()       — show or hide the scratchpad     │
-// │  Escape        → hide_if_visible()     — always dismiss                  │
+// │  ⌘J / Ctrl+J  → toggle_window()        — show or hide the scratchpad    │
+// │  Escape        → hide_if_visible()      — always dismiss                 │
 // │  ⌘, / Ctrl+,  → show_prefs_in_window() — open preferences panel         │
 // │                                                                          │
-// │  Menu Bar / System Tray (v2.5.0)                                         │
-// │    macOS: icon in the menu bar (right side, always visible)              │
-// │    Windows/Linux: icon in the system tray / notification area            │
-// │    Menu items: Show/Hide · Preferences · Check for Updates · Quit        │
-// │    Single-click on the tray icon also toggles the window.                │
+// │  Window dragging (v2.6.0)                                                │
+// │    The entire window surface is a drag region (-webkit-app-region:drag)  │
+// │    Interactive elements (textarea, buttons, links) override with         │
+// │    no-drag so clicks still register normally. This means you can drag    │
+// │    Junk from the header, the empty margins, or anywhere that isn't       │
+// │    the text editing area — natural and zero-JS.                          │
 // │                                                                          │
-// │  Window lifecycle (persistent process)                                   │
-// │    close button → hide()   (never quits — stays in background)           │
-// │    ⌘Q          → hide()   (intercept quit, hide instead)                 │
-// │    Quit (tray) → app.exit(0) — the ONLY way to truly quit               │
+// │  Window lifecycle                                                        │
+// │    close button (×) → hide()   — process stays alive, shortcut works    │
+// │    ⌘Q              → exit(0)  — quit for real (v2.6.0 behaviour)        │
+// │    Esc              → hide()   — via OS shortcut                         │
 // │                                                                          │
 // │  IPC commands (called from JS in the prefs panel / update checker)       │
 // │    hide_window()             → hides the main window                     │
@@ -39,11 +40,7 @@
 // Silence the console window that Windows would normally open for a GUI app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, RunEvent, WebviewWindow,
-};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -64,10 +61,9 @@ struct Prefs {
 
 /// Update check result returned from `check_for_update()`.
 ///
-/// Serialised as JSON:
-///   { "up_to_date": true, "current": "2.5.0", "latest": "2.5.0", "url": "..." }
-/// or:
-///   { "up_to_date": false, "current": "2.4.0", "latest": "2.5.0", "url": "..." }
+/// Serialised as JSON and sent to JS:
+///   { "up_to_date": true,  "current": "2.6.0", "latest": "2.6.0", "url": "..." }
+///   { "up_to_date": false, "current": "2.5.0", "latest": "2.6.0", "url": "..." }
 #[derive(serde::Serialize)]
 struct UpdateResult {
     up_to_date: bool,
@@ -80,8 +76,8 @@ struct UpdateResult {
 
 /// Hide the main scratchpad window.
 ///
-/// Called from JS via `invoke('hide_window')`. This is a thin IPC wrapper
-/// around `window.hide()` — JS cannot call native window APIs directly.
+/// Called from JS via `invoke('hide_window')`. Thin IPC wrapper around
+/// `window.hide()` — JS cannot call native window APIs directly.
 #[tauri::command]
 fn hide_window(app: AppHandle) -> Result<(), String> {
     let window = app
@@ -92,25 +88,16 @@ fn hide_window(app: AppHandle) -> Result<(), String> {
 
 /// Open the preferences panel in the frontend.
 ///
-/// This command:
-///   1. Shows and focuses the window if it was hidden (so ⌘, works globally)
-///   2. Emits the 'open-prefs' Tauri event to the JS frontend
-///
-/// The JS side listens for 'open-prefs' and slides the prefs panel up.
+/// 1. Shows and focuses the window if it was hidden (⌘, works globally).
+/// 2. Emits the 'open-prefs' Tauri event — JS slides the panel up.
 #[tauri::command]
 fn open_prefs(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
-
-    // Ensure the window is visible before emitting — if it was hidden, the
-    // JS event listener is still active (WebView lives forever) but the user
-    // needs to see the panel.
     if let Ok(false) = window.is_visible() {
         show_and_focus(&window);
     }
-
-    // Emit the event that triggers the JS prefs panel slide-up animation.
     window
         .emit("open-prefs", ())
         .map_err(|e: tauri::Error| e.to_string())
@@ -118,29 +105,19 @@ fn open_prefs(app: AppHandle) -> Result<(), String> {
 
 /// Return the current preference values to the frontend.
 ///
-/// Called when the prefs panel opens to populate the toggle states.
 /// Reads real OS state on every call — accurate even if the user changed
 /// the login item via System Settings since the app last ran.
 #[tauri::command]
 fn get_prefs(app: AppHandle) -> Result<Prefs, String> {
-    let launch_at_login = app
-        .autolaunch()
-        .is_enabled()
-        .unwrap_or(false);
-
+    let launch_at_login = app.autolaunch().is_enabled().unwrap_or(false);
     Ok(Prefs { launch_at_login })
 }
 
 /// Enable or disable the OS login item for Junk.
 ///
-/// On macOS: creates/removes a LaunchAgent plist in ~/Library/LaunchAgents/.
-///   This is a per-user item — no admin/root privileges required.
-///   launchd reads the plist on next login and starts Junk automatically.
-///
-/// On Windows: writes/removes a value in
-///   HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
-///
-/// On Linux: creates/removes ~/.config/autostart/junk.desktop
+/// macOS:   creates/removes ~/Library/LaunchAgents/<bundle-id>.plist
+/// Windows: writes/removes HKCU\...\Microsoft\Windows\CurrentVersion\Run
+/// Linux:   creates/removes ~/.config/autostart/junk.desktop
 #[tauri::command]
 fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mgr = app.autolaunch();
@@ -159,30 +136,19 @@ fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
 
 /// Check GitHub releases API for a newer version of Junk.
 ///
-/// This is a Rust-side HTTP fetch (via tauri-plugin-http / reqwest) rather
-/// than a JS fetch() for two reasons:
+/// HTTP fetch is done from Rust (tauri-plugin-http / reqwest) rather than JS:
+///   - JS fetch() can be blocked by the WebView Content Security Policy.
+///   - Rust has compile-time access to CARGO_PKG_VERSION, no extra IPC needed.
 ///
-///   1. Reliability: The WebView's fetch() can be blocked by the Content
-///      Security Policy set on the webview. The Tauri HTTP plugin makes
-///      the request from the Rust process, bypassing the WebView CSP
-///      entirely. This is why "Check for updates" was failing before v2.5.0.
-///
-///   2. Version access: Rust has compile-time access to CARGO_PKG_VERSION
-///      (the version string from Cargo.toml) without any IPC round-trip.
-///
-/// Response schema:
-///   { "up_to_date": bool, "current": "2.5.0", "latest": "2.5.0", "url": "..." }
-///
-/// The `url` field points to the releases page so the frontend can render a
-/// "Download v2.x.x" link directly.
+/// Returns UpdateResult: { up_to_date, current, latest, url }
 #[tauri::command]
 async fn check_for_update() -> Result<UpdateResult, String> {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let api_url = "https://api.github.com/repos/paulfxyz/junk/releases/latest";
     let releases_page = "https://github.com/paulfxyz/junk/releases".to_string();
 
-    // Use tauri-plugin-http's reqwest client.
-    // We must set a User-Agent — GitHub API rejects requests without one.
+    // Build a reqwest client with the required User-Agent header.
+    // GitHub API rejects requests without a User-Agent with 403.
     let client = tauri_plugin_http::reqwest::Client::builder()
         .user_agent(format!("Junk/{}", env!("CARGO_PKG_VERSION")))
         .build()
@@ -200,7 +166,7 @@ async fn check_for_update() -> Result<UpdateResult, String> {
     }
 
     // tauri_plugin_http's reqwest re-export doesn't enable the `json` feature,
-    // so we read the body as text and parse it ourselves with serde_json.
+    // so we read the body as text and parse it with serde_json.
     let text = resp
         .text()
         .await
@@ -209,7 +175,7 @@ async fn check_for_update() -> Result<UpdateResult, String> {
     let body: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("JSON parse failed: {e}"))?;
 
-    // tag_name is "v2.5.0" — strip the leading "v" for semver comparison
+    // tag_name is "v2.6.0" — strip the leading "v" for semver comparison
     let tag = body
         .get("tag_name")
         .and_then(|v| v.as_str())
@@ -221,9 +187,8 @@ async fn check_for_update() -> Result<UpdateResult, String> {
         return Err("Could not parse tag_name from GitHub response".to_string());
     }
 
-    // Simple semver comparison: compare the trimmed version strings.
-    // For Junk's versioning scheme (major.minor.patch, no pre-release suffixes)
-    // this is reliable. A full semver library would be overkill for 3 integers.
+    // Simple version string comparison — reliable for major.minor.patch
+    // without pre-release suffixes. Full semver library would be overkill.
     let up_to_date = tag == current;
     let url = if up_to_date {
         releases_page.clone()
@@ -244,7 +209,7 @@ async fn check_for_update() -> Result<UpdateResult, String> {
 // ── Window visibility helpers ─────────────────────────────────────────────────
 
 /// Toggle the main window between visible and hidden.
-/// Called by the ⌘J / Ctrl+J global shortcut and the tray icon click.
+/// Called by the ⌘J / Ctrl+J global shortcut.
 fn toggle_window(window: &WebviewWindow) {
     match window.is_visible() {
         Ok(true) => {
@@ -273,163 +238,12 @@ fn show_and_focus(window: &WebviewWindow) {
     }
 }
 
-// ── System tray / menu bar (v2.5.0) ──────────────────────────────────────────
-
-/// Build and register the system tray icon with its context menu.
-///
-/// macOS: appears in the menu bar (right side, next to the clock).
-/// Windows: appears in the notification area (system tray, bottom-right).
-/// Linux: appears in the status area (compositor-dependent).
-///
-/// Menu structure:
-///   Show / Hide Junk      ← toggles the scratchpad window
-///   ─────────────────
-///   Preferences           ← opens the prefs panel (same as ⌘,)
-///   Check for Updates     ← triggers async update check
-///   ─────────────────
-///   Quit Junk             ← the ONLY way to truly quit the process
-///
-/// Why add a tray icon when we already have no Dock icon?
-///   Without a Dock icon or tray icon, Junk is completely invisible to the OS
-///   UI once the window is hidden. The tray icon provides:
-///     1. Visual confirmation the app is running (users know it's alive)
-///     2. A fallback to show/hide when the global shortcut fails or conflicts
-///     3. A clear, discoverable "Quit" action (vs. Activity Monitor)
-///     4. Quick access to Preferences without remembering ⌘,
-fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    // ── Tray menu items ────────────────────────────────────────────────────
-
-    // "Show / Hide Junk" — toggles the main window
-    let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide Junk", true, None::<&str>)?;
-
-    // Separator
-    let sep1 = PredefinedMenuItem::separator(app)?;
-
-    // "Preferences" — opens the prefs panel
-    let prefs = MenuItem::with_id(app, "prefs", "Preferences", true, Some("CmdOrCtrl+,"))?;
-
-    // "Check for Updates" — triggers the async update check and shows a dialog
-    let updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
-
-    // Separator
-    let sep2 = PredefinedMenuItem::separator(app)?;
-
-    // "Quit Junk" — the only true exit point. We use a custom item (not
-    // PredefinedMenuItem::quit) so we can give it the "Junk" app name.
-    let quit = MenuItem::with_id(app, "quit", "Quit Junk", true, None::<&str>)?;
-
-    // Build the menu
-    let menu = Menu::with_items(app, &[
-        &show_hide,
-        &sep1,
-        &prefs,
-        &updates,
-        &sep2,
-        &quit,
-    ])?;
-
-    // ── Load the tray icon ─────────────────────────────────────────────────
-    // We use the app icon (16×16 or 32×32 PNG). Tauri loads it from the
-    // icon path configured in tauri.conf.json's bundle.icon array.
-    // Image::from_path loads PNG directly from the resource directory.
-    //
-    // On macOS, menu bar icons should be:
-    //   - 16×16 or 22×22 logical pixels
-    //   - Template images (dark/light adaptive) ideally, or a simple monochrome icon
-    // We use the app's existing icon — not ideal for menu bar but functional.
-    // app.default_window_icon() returns Option<&Image> — clone it for the tray.
-    // If no icon is configured (shouldn't happen — tauri.conf.json always ships
-    // icons), return early gracefully rather than crashing.
-    let icon = match app.default_window_icon() {
-        Some(i) => i.clone(),
-        None => {
-            log::warn!("No default window icon found — tray icon will be empty");
-            return Ok(());
-        }
-    };
-
-    // ── Build the tray ─────────────────────────────────────────────────────
-    let app_handle = app.clone();
-    let app_handle2 = app.clone();
-
-    TrayIconBuilder::with_id("junk-tray")
-        .icon(icon)
-        .menu(&menu)
-        .tooltip("Junk — press ⌘J to toggle")
-        // Left-click on the tray icon toggles the window (macOS: click, not right-click)
-        .on_tray_icon_event(move |_tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    toggle_window(&window);
-                }
-            }
-        })
-        // Menu item click handler
-        .on_menu_event(move |app, event| {
-            match event.id().as_ref() {
-                "show_hide" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        toggle_window(&window);
-                    }
-                }
-                "prefs" => {
-                    // Show window first (if hidden), then emit open-prefs event
-                    if let Some(window) = app.get_webview_window("main") {
-                        if let Ok(false) = window.is_visible() {
-                            show_and_focus(&window);
-                        }
-                        let _ = window.emit("open-prefs", ());
-                    }
-                }
-                "check_updates" => {
-                    // Trigger the update check from the tray.
-                    // We spawn a thread to avoid blocking the menu event handler.
-                    // The result is emitted back to JS as a 'update-result' event.
-                    let app2 = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        match check_for_update().await {
-                            Ok(result) => {
-                                if let Some(window) = app2.get_webview_window("main") {
-                                    // Make sure window is visible for the result
-                                    if let Ok(false) = window.is_visible() {
-                                        show_and_focus(&window);
-                                    }
-                                    let _ = window.emit("update-result", &result);
-                                }
-                            }
-                            Err(e) => {
-                                log::error!("Tray update check failed: {e}");
-                            }
-                        }
-                    });
-                }
-                "quit" => {
-                    // This is the ONLY path that truly exits the process.
-                    // ⌘Q and the × button are intercepted and converted to hide().
-                    log::info!("Quit requested via tray menu — exiting.");
-                    app_handle2.exit(0);
-                }
-                _ => {}
-            }
-        })
-        .build(app)?;
-
-    log::info!("System tray icon registered.");
-    Ok(())
-}
-
 // ── Global shortcut registration ──────────────────────────────────────────────
 
 /// Register ⌘J (macOS) / Ctrl+J (Windows/Linux) as a global toggle shortcut.
 ///
-/// IMPORTANT: never combine SUPER|CONTROL — on macOS that requires both
-/// ⌘ and Ctrl simultaneously (⌘^J). Always use exactly one modifier per
-/// platform. This was the v2.0.0 bug.
+/// IMPORTANT: never combine SUPER|CONTROL — on macOS that would require both
+/// ⌘ and Ctrl simultaneously. Always use exactly one modifier per platform.
 fn register_toggle_shortcut(app: &AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let modifiers = Modifiers::SUPER;
@@ -457,9 +271,9 @@ fn register_toggle_shortcut(app: &AppHandle) -> Result<(), String> {
 
 /// Register Escape as an OS-level shortcut to hide the window.
 ///
-/// OS-level shortcut bypasses the WebView entirely — more reliable than JS.
-/// Only hides if the window is currently visible (stray Esc presses from
-/// other apps while Junk is hidden are silent no-ops).
+/// OS-level bypasses the WebView entirely — more reliable than JS.
+/// Only hides if the window is visible — stray Esc presses while hidden
+/// are silent no-ops.
 fn register_esc_shortcut(app: &AppHandle) -> Result<(), String> {
     let esc_shortcut = Shortcut::new(None, Code::Escape);
     let app_handle = app.clone();
@@ -491,7 +305,8 @@ fn register_esc_shortcut(app: &AppHandle) -> Result<(), String> {
 
 /// Register ⌘, (macOS) / Ctrl+, (Windows/Linux) to open preferences.
 ///
-/// Works even when the window is hidden — we show + focus it before emitting.
+/// Shows and focuses the window first if it was hidden, so the prefs panel
+/// is always reachable via keyboard even when Junk is in the background.
 fn register_prefs_shortcut(app: &AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let modifiers = Modifiers::SUPER;
@@ -526,12 +341,9 @@ fn register_prefs_shortcut(app: &AppHandle) -> Result<(), String> {
 
 /// Remove Junk from the macOS Dock and ⌘-Tab app switcher.
 ///
-/// Uses `Accessory` policy — hides Dock icon but still receives keyboard focus
-/// and can have windows. Must be called before any window is shown to avoid
-/// a flash of the Dock icon on startup.
-///
-/// Note: with a tray icon, the macOS menu bar still shows Junk's icon — only
-/// the Dock entry is hidden. This is the correct behaviour for utility apps.
+/// `Accessory` policy: hides Dock icon, still receives keyboard focus and
+/// can have windows. Must be called before any window appears to avoid a
+/// flash of the Dock icon on startup.
 #[cfg(target_os = "macos")]
 fn set_macos_activation_policy(app: &AppHandle) {
     use tauri::ActivationPolicy;
@@ -554,15 +366,13 @@ fn main() {
         // ── Plugins ───────────────────────────────────────────────────────────
         // Global shortcut plugin — registers OS-level hotkeys
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        // Autostart plugin — MacosLauncher::LaunchAgent writes a per-user
-        // LaunchAgent plist (~/Library/LaunchAgents/). No root required.
+        // Autostart plugin — LaunchAgent plist on macOS (per-user, no root needed)
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None::<Vec<&str>>,
         ))
-        // HTTP plugin — allows Rust to make outbound HTTPS requests.
-        // Used by check_for_update() to fetch api.github.com from Rust,
-        // bypassing the WebView's Content Security Policy.
+        // HTTP plugin — used by check_for_update() to fetch api.github.com
+        // from Rust, bypassing the WebView Content Security Policy.
         .plugin(tauri_plugin_http::init())
         // ── Setup hook ────────────────────────────────────────────────────────
         .setup(|app| {
@@ -575,7 +385,6 @@ fn main() {
             // Register OS-level global shortcuts
             if let Err(e) = register_toggle_shortcut(handle) {
                 log::warn!("⌘J shortcut registration failed: {e}");
-                log::warn!("Another app may own CmdOrCtrl+J — use the tray icon instead.");
             }
             if let Err(e) = register_esc_shortcut(handle) {
                 log::warn!("Esc shortcut registration failed: {e}");
@@ -584,17 +393,10 @@ fn main() {
                 log::warn!("Prefs shortcut (⌘,) registration failed: {e}");
             }
 
-            // Set up the system tray / menu bar icon (v2.5.0)
-            if let Err(e) = setup_tray(handle) {
-                log::error!("Tray setup failed: {e}");
-            }
-
             log::info!("Setup complete. Junk v{} is ready.", env!("CARGO_PKG_VERSION"));
             Ok(())
         })
         // ── IPC commands ──────────────────────────────────────────────────────
-        // All commands are callable from JS via invoke('command_name', args).
-        // check_for_update is async — it makes an HTTP request.
         .invoke_handler(tauri::generate_handler![
             hide_window,
             open_prefs,
@@ -602,17 +404,13 @@ fn main() {
             set_launch_at_login,
             check_for_update,
         ])
-        // ── Persistent process — intercept close/quit events ──────────────────
-        //
-        // Junk never exits via normal close/quit paths. The process stays alive
-        // so the global shortcut remains registered. The tray's "Quit Junk"
-        // item is the only true exit path.
-        //
-        // Pattern used by: Alfred, Paste, Magnet, Rectangle, Raycast.
+        // ── Window event handling ─────────────────────────────────────────────
         .build(tauri::generate_context!())
         .expect("Fatal: Tauri failed to start.")
         .run(|app, event| match event {
-            // Window × button or ⌘W → hide instead of close
+            // Window × button → hide instead of close.
+            // The process stays alive so the global shortcut remains registered.
+            // This mirrors how Alfred, Paste, and Magnet behave on macOS.
             RunEvent::WindowEvent {
                 label,
                 event: tauri::WindowEvent::CloseRequested { api, .. },
@@ -626,16 +424,15 @@ fn main() {
                 }
             }
 
-            // ⌘Q on macOS → hide instead of quit
-            // Note: the tray "Quit Junk" item calls app.exit(0) directly,
-            // bypassing this handler — that's the only true exit path.
-            RunEvent::ExitRequested { api, .. } => {
-                api.prevent_exit();
-                if let Some(window) = app.get_webview_window("main") {
-                    if let Ok(true) = window.is_visible() {
-                        let _ = window.hide();
-                    }
-                }
+            // ⌘Q → quit for real (v2.6.0).
+            // In v2.5.0 ⌘Q was intercepted and converted to hide() because
+            // the tray "Quit Junk" item was the only exit path.
+            // Now that the tray is gone, ⌘Q is the natural quit gesture again.
+            // We still get the ExitRequested event and call app.exit(0) explicitly
+            // so the shutdown is clean and logged.
+            RunEvent::ExitRequested { .. } => {
+                log::info!("ExitRequested (⌘Q) — shutting down.");
+                app.exit(0);
             }
 
             _ => {}

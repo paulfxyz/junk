@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "2.5.0"
+version = "2.6.0"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -24,9 +24,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Core Tauri framework — brings in the WebView, IPC, window management, etc.
 # We enable "devtools" so developers can open the inspector in debug builds.
-# "tray-icon" is a built-in Tauri v2 feature (NOT a separate plugin crate) —
-# it exposes the tauri::tray module with TrayIconBuilder, TrayIconEvent, etc.
-tauri = { version = "2", features = ["devtools", "tray-icon"] }
+# Note: tray-icon feature removed in v2.6.0 — we no longer use the system tray.
+tauri = { version = "2", features = ["devtools"] }
 
 # Global shortcut plugin (Tauri v2 splits plugins out of core).
 # This replaces the old tauri::GlobalShortcutManager from v1.
