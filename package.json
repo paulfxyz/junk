@@ -1,17 +1,17 @@
 {
   "name": "junk",
-  "version": "1.4.0",
-  "description": "A flying scratchpad for macOS. Hit CMD+J, type, paste, think. Gone when you're done.",
+  "version": "1.5.0",
+  "description": "A flying scratchpad for macOS, Windows and Linux. One shortcut. No chrome. No cloud.",
   "main": "src/main.js",
   "author": "Paul Fleury <hello@paulfleury.com>",
   "license": "MIT",
   "private": false,
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --mac --arm64 --x64",
-    "build:arm64": "electron-builder --mac --arm64",
-    "build:x64": "electron-builder --mac --x64",
-    "pack": "electron-builder --dir",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {},
@@ -23,14 +23,17 @@
     "appId": "com.paulfleury.junk",
     "productName": "Junk",
     "copyright": "Copyright © 2026 Paul Fleury",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "publish": null,
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
       "target": [
-        {
-          "target": "dmg",
-          "arch": ["arm64", "x64"]
-        }
+        { "target": "dmg", "arch": ["arm64", "x64"] }
       ],
       "darkModeSupport": true,
       "identity": null,
@@ -42,20 +45,34 @@
     "dmg": {
       "title": "Junk",
       "background": "assets/dmg-background.png",
-      "window": {
-        "width": 540,
-        "height": 380
-      },
+      "window": { "width": 620, "height": 400 },
       "contents": [
-        { "x": 150, "y": 185, "type": "file" },
-        { "x": 390, "y": 185, "type": "link", "path": "/Applications" }
+        { "x": 140, "y": 200, "type": "file" },
+        { "x": 380, "y": 200, "type": "link", "path": "/Applications" },
+        { "x": 560, "y": 200, "type": "file", "path": "assets/README.txt" }
       ]
     },
-    "files": [
-      "src/**/*",
-      "assets/**/*",
-      "package.json"
-    ],
-    "publish": null
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Junk"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
+    }
   }
 }

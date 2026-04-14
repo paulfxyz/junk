@@ -6,23 +6,24 @@
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
 ║    🗒️  J U N K                                          ║
-║        the flying macOS scratchpad                       ║
+║        the flying scratchpad                             ║
 ║                                                          ║
-║    ⌘J  →  window flies in                               ║
+║    ⌘J  /  Ctrl+J  →  window flies in                   ║
 ║    type, paste, think                                    ║
 ║    Esc  →  gone                                          ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
-[![Version](https://img.shields.io/badge/version-1.4.0-4F98A3?style=flat-square&labelColor=12110e)](https://github.com/paulfxyz/junk/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS-000000?style=flat-square)](https://github.com/paulfxyz/junk/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.5.0-4F98A3?style=flat-square&labelColor=12110e)](https://github.com/paulfxyz/junk/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-supported-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/paulfxyz/junk/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-supported-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/paulfxyz/junk/releases/latest)
+[![Linux](https://img.shields.io/badge/Linux-supported-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-white?style=flat-square)](LICENSE)
 [![Built with Electron](https://img.shields.io/badge/built_with-Electron-47848F?style=flat-square&logo=electron&logoColor=white)](https://electronjs.org)
-[![Status](https://img.shields.io/badge/status-active-22c55e?style=flat-square)](https://github.com/paulfxyz/junk/releases/latest)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-4F98A3?style=flat-square)](https://github.com/paulfxyz/junk/pulls)
 
-**A background scratchpad for macOS. One shortcut. No chrome. No cloud. Just a place to dump your brain.**
+**A global-hotkey scratchpad for macOS, Windows, and Linux. One shortcut. No chrome. No cloud. Just a place to dump your brain.**
 
 [Download](https://github.com/paulfxyz/junk/releases/latest) · [Report Bug](https://github.com/paulfxyz/junk/issues) · [Request Feature](https://github.com/paulfxyz/junk/issues)
 
@@ -32,24 +33,28 @@
 
 ## What is Junk?
 
-Junk is a global-hotkey scratchpad that lives silently in your macOS menu bar. Press `⌘J` from *any* app, any Space, any context — a dark glass window flies in at the center of your screen. Type. Paste. Think. Press `Esc` to dismiss. Everything is auto-saved between launches.
+Junk is a background scratchpad app. It sits invisible — no Dock icon, no tray icon, no menu bar presence — until you need it.
 
-No accounts. No sync. No settings screen. No Dock icon. No cloud. Just a fast, frictionless place to dump text.
+Press `⌘J` (macOS) or `Ctrl+J` (Windows / Linux) from *any* app, any context. A frosted glass window flies in at the center of your screen. Type. Paste. Think. Press `Esc` or the shortcut again to dismiss. Everything is auto-saved between launches.
+
+No accounts. No sync. No settings screen. No cloud. Just a fast, frictionless place to dump text.
 
 ---
 
 ## Why it exists
 
-Every developer has the same problem: something you need to write down *right now* — an API key you just copied, a quick note from a meeting, a URL to revisit, a command you haven't run yet, a half-formed thought.
+Every developer and knowledge worker hits the same wall: something you need to write down *right now*.
 
-The alternatives all suck for this:
-- **Notes.app** — takes too long to open, puts you in the wrong context
-- **Sticky Notes** — clutter
-- **The Desktop** — a TextEdit file with "untitled 47.txt"
-- **Slack yourself** — you read it, you forget it
-- **Terminal** — you didn't want to be in the terminal
+An API key you just copied. A quick note from a call. A URL to revisit. A half-formed thought before it evaporates. A command you haven't run yet. A snippet to transform before pasting somewhere.
 
-Junk is `⌘J`. It's there in 160ms. You dump the thing. You hit `Esc`. It's gone. The text is still there when you need it again.
+The usual suspects all fail here:
+- **Notes.app / Notepad** — takes too long, wrong context
+- **Slack yourself** — you'll never find it again
+- **Desktop text files** — `untitled 47.txt`
+- **Browser address bar** — don't
+- **Terminal** — you didn't want to be there
+
+Junk is `⌘J` / `Ctrl+J`. It's there in under 200ms. You dump the thing. You hit `Esc`. It's gone. The text is still there when you come back.
 
 ---
 
@@ -57,150 +62,179 @@ Junk is `⌘J`. It's there in 160ms. You dump the thing. You hit `Esc`. It's gon
 
 | | |
 |---|---|
-| **⌘J global hotkey** | Works from any app, any Space, any fullscreen window |
-| **Toggle** | Same shortcut shows and hides — no separate dismiss shortcut to remember |
-| **Auto-hide on blur** | Click anywhere outside → Junk disappears. Exactly like Spotlight |
-| **Auto-save** | Content survives restarts. No manual save, no prompt |
-| **Fly-in animation** | 160ms cubic-bezier spring — fast enough to feel instant |
-| **Frameless glass UI** | macOS vibrancy, near-black warm background, no window chrome |
-| **Large mono font** | 22px SF Mono — big enough to actually read while you're dumping things |
-| **Menu bar icon** | Small `J` in your menu bar — right-click for toggle and quit |
-| **No Dock icon** | Stays completely out of your `⌘Tab` rotation |
-| **Esc to close** | Fastest exit |
-| **Paste anywhere** | Paste even if the textarea isn't focused — Junk catches it |
-| **Draggable** | Grab the title bar, move it wherever |
+| **Global hotkey** | `⌘J` on macOS · `Ctrl+J` on Windows and Linux · works from any app, any fullscreen window |
+| **Toggle** | Same shortcut shows and hides |
+| **Esc to close** | Fastest way out |
+| **Persistent window** | Switching apps does not close Junk — copy text, run a clipboard tool, come back, it's still there |
+| **Auto-save** | Content survives restarts — stored locally via `localStorage` |
+| **Frosted glass UI** | macOS: native vibrancy (`under-window`) · Windows/Linux: backdrop-filter blur |
+| **Space Grotesk font** | 22px, line-height 1.80 — comfortable for dumping thoughts fast |
+| **Fully frameless** | No title bar, no traffic lights, no window chrome |
+| **Drag anywhere** | Grab any non-text area to reposition |
+| **No Dock icon** | Stays completely out of `⌘Tab` / `Alt+Tab` |
+| **No tray icon** | Truly invisible — just the hotkey |
+| **Paste anywhere** | Even if the textarea isn't focused, paste works |
+| **Cross-platform** | macOS (arm64 + x64) · Windows (installer + portable) · Linux (AppImage + deb) |
 
 ---
 
 ## Install
 
-### Download (recommended)
+### macOS
 
-1. Go to [**Releases**](https://github.com/paulfxyz/junk/releases/latest)
-2. Download the right `.dmg` for your Mac:
-   - **Apple Silicon (M1 / M2 / M3 / M4)** → `Junk-1.4.0-arm64.dmg`
-   - **Intel Mac** → `Junk-1.4.0-x64.dmg`
-3. Open the `.dmg` → drag **Junk.app** to `/Applications`
-4. First launch — strip the quarantine flag:
+> **Apple Silicon (M1 / M2 / M3 / M4)** → `Junk-1.5.0-arm64.dmg`
+> **Intel Mac** → `Junk-1.5.0-x64.dmg`
+
+1. Download from [Releases](https://github.com/paulfxyz/junk/releases/latest)
+2. Open the `.dmg` → drag **Junk.app** to `/Applications`
+3. **Required first-launch step** — Junk is not notarized with an Apple Developer certificate. Run this in Terminal:
 
 ```bash
 xattr -rd com.apple.quarantine /Applications/Junk.app
 open /Applications/Junk.app
 ```
 
-Or: right-click **Junk.app** → **Open** → **Open**.
+That's it. Junk starts silently in the background. Press **`⌘J`** from anywhere.
 
-> Junk is not notarized with an Apple Developer certificate. The quarantine step is a one-time bypass — you only need to do it once.
+> **Why this step?** macOS Gatekeeper quarantines apps downloaded from the internet that aren't signed with a paid Apple Developer certificate ($99/year). The `xattr` command removes that quarantine flag. You only need to do this once — after that Junk launches normally on login.
 
-See [INSTALL.md](INSTALL.md) for full instructions.
+---
+
+### Windows
+
+> `Junk-Setup-1.5.0.exe` — one-click installer
+> `Junk-1.5.0.exe` — portable (no install needed)
+
+1. Download the installer or portable from [Releases](https://github.com/paulfxyz/junk/releases/latest)
+2. Run it — Windows SmartScreen may warn about an unknown publisher (click **More info → Run anyway**)
+3. Press **`Ctrl+J`** from anywhere
+
+To launch on startup: add a shortcut to `Junk.exe` in `shell:startup`.
+
+---
+
+### Linux
+
+> `Junk-1.5.0.AppImage` — universal, no install
+> `junk_1.5.0_amd64.deb` — Debian / Ubuntu
+
+**AppImage:**
+```bash
+chmod +x Junk-1.5.0.AppImage
+./Junk-1.5.0.AppImage
+```
+
+**Debian / Ubuntu:**
+```bash
+sudo dpkg -i junk_1.5.0_amd64.deb
+junk
+```
+
+Then press **`Ctrl+J`** from anywhere.
+
+To autostart on login, add Junk to your desktop environment's startup applications.
 
 ---
 
 ## Usage
 
-| Action | How |
-|---|---|
-| Open / close | `⌘J` from anywhere |
-| Close | `Esc` or the `×` button |
-| Move the window | Drag the title bar |
-| Select all text | `⌘A` |
-| Clear everything | `⌘A` → `Delete` |
-| Quit the app | Menu bar `J` icon → **Quit Junk** |
+| Action | macOS | Windows / Linux |
+|---|---|---|
+| Open / close | `⌘J` | `Ctrl+J` |
+| Close | `Esc` | `Esc` |
+| Move window | Drag footer or border | Drag footer or border |
+| Select all | `⌘A` | `Ctrl+A` |
+| Clear all | `⌘A` → `Delete` | `Ctrl+A` → `Delete` |
 
 ---
 
 ## Build from source
 
-**Requirements:** Node.js 20+, macOS (for `iconutil`)
+**Requirements:** Node.js 20+, macOS (for `.icns` generation)
 
 ```bash
 git clone https://github.com/paulfxyz/junk.git
 cd junk
 npm install
 
-# Generate the .icns icon (macOS only)
+# macOS only — generate ICNS icon
 iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
 # Run in development
 npm start
 
-# Build DMG
-npm run build
-# → dist/Junk-1.4.0-arm64.dmg
-# → dist/Junk-1.4.0-x64.dmg
+# Build for your platform
+npm run build:mac    # → dist/*.dmg
+npm run build:win    # → dist/*.exe
+npm run build:linux  # → dist/*.AppImage + *.deb
 ```
 
 ---
 
 ## Under the Hood
 
-> A technical breakdown of how Junk works — for developers who want to understand or fork it.
+> How Junk works — for developers who want to understand or fork it.
 
-### Global shortcut registration
+### Global shortcut
 
 ```js
 globalShortcut.register('CommandOrControl+J', toggleWindow)
 ```
 
-Registered after `app.whenReady()`, unregistered on `will-quit`. This intercepts `⌘J` at the OS level *before* any focused app sees it — so it works inside VS Code, browsers, terminals, fullscreen apps, everything.
+`CommandOrControl` maps to `⌘` on macOS and `Ctrl` on Windows/Linux automatically. Registered after `app.whenReady()`, unregistered on `will-quit`. Intercepts the key at OS level — works inside any focused app, fullscreen game, or terminal.
 
-### Frameless + transparent window
-
-`BrowserWindow` is created with `frame: false` and `transparent: true`. This gives macOS's compositor full control over the window shape. The `vibrancy: 'under-window'` setting activates the native blur material — the same glass effect used by Spotlight and Control Center — which blurs whatever is behind Junk and adapts to the wallpaper.
-
-### Auto-hide on blur
+### Native window, no chrome
 
 ```js
-win.on('blur', hideWindow)
+{
+  titleBarStyle:        'hiddenInset',
+  trafficLightPosition: { x: -100, y: -100 },  // pushed off-screen
+  transparent:          true,
+  vibrancy:             'under-window',          // macOS glass
+}
 ```
 
-When focus leaves the window for any reason — clicking another app, switching Space, pressing `⌘Tab` — Junk hides instantly. Same model as Spotlight or Alfred. No close button required.
+`titleBarStyle: 'hiddenInset'` gives a real macOS native window — proper shadow, proper compositor rounding, proper vibrancy material — but hides the title bar. The traffic light buttons are pushed to `{x: -100, y: -100}` so they're invisible and unreachable. No fake CSS border-radius, no frameless-window hacks.
+
+On Windows and Linux, `transparent: true` + CSS `backdrop-filter: blur(40px)` gives a similar frosted effect without native vibrancy.
+
+### Persistent window
+
+The blur event is intentionally **not** handled. Most scratchpads close when you click away — Junk does not. This is the key design decision: you can copy text from Junk, switch to another app, run a clipboard processing tool, and come back. The window is exactly where you left it.
 
 ### Content persistence
 
-The renderer uses `localStorage`. Electron stores it in:
-
-```
-~/Library/Application Support/junk/
+```js
+localStorage.setItem('junk:content', pad.value)
 ```
 
-Saves are debounced 400ms after each keystroke — never blocks the UI, survives crashes.
+Electron stores `localStorage` at:
+- macOS: `~/Library/Application Support/junk/`
+- Windows: `%APPDATA%\junk\`
+- Linux: `~/.config/junk/`
+
+Saves are debounced 300ms after each keystroke — never blocks the UI.
 
 ### Fly-in animation
 
 ```css
-@keyframes flyIn {
-  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)     scale(1);    }
+@keyframes in {
+  from { opacity: 0; transform: scale(0.96) translateY(-10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);     }
 }
-animation: flyIn 160ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+animation: in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 ```
 
-`cubic-bezier(0.34, 1.56, 0.64, 1)` is a spring curve with a slight scale overshoot — it gives the window a physical "pop" without being distracting. 160ms is below the threshold of feeling slow.
+`cubic-bezier(0.22, 1, 0.36, 1)` is a fast ease-out — snappy entry with no spring overshoot. 180ms is imperceptible as delay but makes the appearance feel intentional rather than jarring.
 
-### Dock hiding
+### Dock / taskbar hiding
 
 ```js
-app.dock?.hide()
+app.dock?.hide()          // macOS — removes from Dock and ⌘Tab
+// skipTaskbar: true      // Windows/Linux — removes from taskbar
 ```
 
-Called synchronously before `app.whenReady()`. The `?.` optional chain handles non-macOS platforms. This is why Junk doesn't appear in `⌘Tab`, the Dock, or Mission Control — it's a pure menu bar utility.
-
-### Context isolation
-
-The preload script uses `contextBridge.exposeInMainWorld` to expose a minimal `window.junk` API to the renderer. `nodeIntegration: false` means the renderer has zero Node.js access — only the explicit surface we hand it.
-
-```js
-contextBridge.exposeInMainWorld('junk', {
-  onShown: (cb) => ipcRenderer.on('window-shown', cb),
-  hide: () => ipcRenderer.send('hide-window'),
-  platform: process.platform,
-})
-```
-
-### Window pre-warming
-
-The window is created on app ready — before any shortcut is pressed — so the first `⌘J` is instant. `win.show()` on a pre-created hidden window is much faster than creating a new one on demand.
+The `?.` optional chain handles non-macOS platforms gracefully. Combined with `skipTaskbar: true` in the `BrowserWindow` config, Junk is invisible in every app switcher on every platform.
 
 ---
 
@@ -209,19 +243,19 @@ The window is created on app ready — before any shortcut is pressed — so the
 ```
 junk/
 ├── src/
-│   ├── main.js        # Electron main process — window, tray, shortcuts, IPC
-│   ├── preload.js     # Context bridge — safe IPC surface for the renderer
+│   ├── main.js        # Electron main process — window, shortcuts, IPC
+│   ├── preload.js     # Context bridge — safe IPC API for the renderer
 │   ├── index.html     # Window markup
-│   ├── style.css      # UI — dark glass, large mono type, fly-in animation
-│   └── renderer.js    # UI logic — persistence, keyboard shortcuts, focus
+│   ├── style.css      # Frosted glass UI, Space Grotesk, animation
+│   └── renderer.js    # Persistence, keyboard shortcuts, focus, paste
 ├── assets/
-│   ├── icon.iconset/  # All macOS icon sizes (16px → 1024px)
-│   ├── icon.icns      # Compiled icon (generated at build time by CI)
-│   ├── icon.png       # Flat PNG for README / GitHub social preview
+│   ├── icon.iconset/  # macOS icon set (16–1024px)
+│   ├── icon.icns      # Compiled macOS icon (generated at build time)
+│   ├── icon.png       # Flat PNG — Windows, Linux, README
 │   └── dmg-background.png
 ├── .github/
 │   └── workflows/
-│       └── build.yml  # CI: ad-hoc signs + packages DMG on every tag push
+│       └── build.yml  # CI: 4 parallel jobs → macOS arm64, macOS x64, Windows, Linux
 ├── package.json
 ├── README.md
 ├── INSTALL.md
@@ -231,15 +265,30 @@ junk/
 
 ---
 
+## CI / Build pipeline
+
+Four parallel GitHub Actions jobs — each on a native runner for its platform:
+
+| Job | Runner | Output |
+|---|---|---|
+| macOS arm64 | `macos-14` (Apple Silicon) | `Junk-*.arm64.dmg` |
+| macOS x64 | `macos-14` (cross-compile) | `Junk-*.dmg` |
+| Windows | `windows-latest` | `Junk-Setup-*.exe` + `Junk-*.exe` (portable) |
+| Linux | `ubuntu-latest` | `Junk-*.AppImage` + `junk_*.deb` |
+
+All macOS builds are ad-hoc signed (leaves → root, `--options runtime --timestamp=none`) before DMG packaging. The release job collects all artifacts and publishes them to the GitHub Release.
+
+---
+
 ## Built with Perplexity Computer
 
-Junk was designed and built in a single session with **[Perplexity Computer](https://www.perplexity.ai)** — from idea to shipped `.dmg`. Architecture, code, signing, CI pipeline, README, and GitHub release — all generated and iterated in one thread.
+Designed and shipped in a single session with **[Perplexity Computer](https://www.perplexity.ai)** — from idea to cross-platform `.dmg` / `.exe` / `.AppImage`. All code, CI pipeline, signing, and documentation generated and iterated in one thread.
 
 ---
 
 ## Contributing
 
-PRs welcome. Keep the philosophy: one thing, fast, no settings.
+PRs welcome. Keep the philosophy: one thing, fast, no settings, no accounts.
 
 ---
 

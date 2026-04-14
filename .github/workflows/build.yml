@@ -10,24 +10,25 @@ permissions:
   contents: write
 
 jobs:
-  build-arm64:
-    name: Build arm64 DMG
+
+  # ────────────────────────────────────────
+  #  macOS arm64 (Apple Silicon)
+  # ────────────────────────────────────────
+  build-mac-arm64:
+    name: macOS arm64
     runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+        with: { node-version: '20' }
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
       - name: Build ICNS
         run: iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build unpacked .app (arm64)
+      - name: Build unpacked .app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
@@ -36,28 +37,16 @@ jobs:
             --config.mac.identity=null \
             --config.mac.gatekeeperAssess=false
 
-      - name: Ad-hoc sign .app (arm64)
+      - name: Ad-hoc sign
         run: |
           APP=$(find dist/mac-arm64 -name "*.app" -maxdepth 1 | head -1)
-          echo "Signing: $APP"
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | \
+            while read f; do codesign --force --sign - "$f" 2>/dev/null || true; done
+          find "$APP" -name "*.framework" | \
+            while read f; do codesign --force --deep --sign - "$f" 2>/dev/null || true; done
+          codesign --force --deep --sign - --options runtime --timestamp=none "$APP"
 
-          # Sign every binary/dylib/framework individually first (leaves → root)
-          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | while read f; do
-            codesign --force --sign - "$f" 2>/dev/null || true
-          done
-          find "$APP" -name "*.framework" | while read f; do
-            codesign --force --deep --sign - "$f" 2>/dev/null || true
-          done
-
-          # Sign the .app root — ad-hoc, hardened runtime, no timestamp (no Apple cert needed)
-          codesign --force --deep --sign - \
-            --options runtime \
-            --timestamp=none \
-            "$APP"
-
-          echo "Signature: $(codesign -dv "$APP" 2>&1 | head -3)"
-
-      - name: Package DMG (arm64)
+      - name: Package DMG
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
@@ -66,31 +55,29 @@ jobs:
             --config.mac.identity=null \
             --config.mac.gatekeeperAssess=false
 
-          ls -lh dist/*.dmg
-
       - uses: actions/upload-artifact@v4
         with:
-          name: dmg-arm64
+          name: mac-arm64
           path: dist/*arm64.dmg
 
-  build-x64:
-    name: Build x64 DMG
+  # ────────────────────────────────────────
+  #  macOS x64 (Intel)
+  # ────────────────────────────────────────
+  build-mac-x64:
+    name: macOS x64
     runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+        with: { node-version: '20' }
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
       - name: Build ICNS
         run: iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build unpacked .app (x64)
+      - name: Build unpacked .app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
@@ -99,26 +86,16 @@ jobs:
             --config.mac.identity=null \
             --config.mac.gatekeeperAssess=false
 
-      - name: Ad-hoc sign .app (x64)
+      - name: Ad-hoc sign
         run: |
           APP=$(find dist -name "*.app" -maxdepth 2 | head -1)
-          echo "Signing: $APP"
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | \
+            while read f; do codesign --force --sign - "$f" 2>/dev/null || true; done
+          find "$APP" -name "*.framework" | \
+            while read f; do codesign --force --deep --sign - "$f" 2>/dev/null || true; done
+          codesign --force --deep --sign - --options runtime --timestamp=none "$APP"
 
-          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | while read f; do
-            codesign --force --sign - "$f" 2>/dev/null || true
-          done
-          find "$APP" -name "*.framework" | while read f; do
-            codesign --force --deep --sign - "$f" 2>/dev/null || true
-          done
-
-          codesign --force --deep --sign - \
-            --options runtime \
-            --timestamp=none \
-            "$APP"
-
-          echo "Signature: $(codesign -dv "$APP" 2>&1 | head -3)"
-
-      - name: Package DMG (x64)
+      - name: Package DMG
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
@@ -127,57 +104,121 @@ jobs:
             --config.mac.identity=null \
             --config.mac.gatekeeperAssess=false
 
-          ls -lh dist/*.dmg
-
       - uses: actions/upload-artifact@v4
         with:
-          name: dmg-x64
+          name: mac-x64
           path: |
             dist/*.dmg
             !dist/*arm64.dmg
 
+  # ────────────────────────────────────────
+  #  Windows x64
+  # ────────────────────────────────────────
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm install
+
+      - name: Build Windows installer + portable
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          npx electron-builder --win nsis portable --x64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+
+  # ────────────────────────────────────────
+  #  Linux x64
+  # ────────────────────────────────────────
+  build-linux:
+    name: Linux x64
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm install
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            rpm fakeroot dpkg libarchive-tools \
+            libgtk-3-0 libnotify4 libnss3 libxss1 \
+            libxtst6 xauth xvfb
+
+      - name: Build AppImage + deb
+        run: |
+          npx electron-builder --linux AppImage deb --x64 --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+
+  # ────────────────────────────────────────
+  #  Publish GitHub Release
+  # ────────────────────────────────────────
   release:
-    name: Publish GitHub Release
-    needs: [build-arm64, build-x64]
+    name: Publish Release
+    needs: [build-mac-arm64, build-mac-x64, build-windows, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          name: dmg-arm64
-          path: dist
-
+        with: { name: mac-arm64, path: dist }
       - uses: actions/download-artifact@v4
-        with:
-          name: dmg-x64
-          path: dist
+        with: { name: mac-x64, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: windows, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: linux, path: dist }
 
-      - name: List release assets
+      - name: List all assets
         run: ls -lh dist/
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           name: Junk ${{ github.ref_name }}
           body: |
             ## Junk ${{ github.ref_name }}
 
-            A flying macOS scratchpad. Hit **⌘J** from anywhere, type or paste, hit **Esc** to dismiss.
+            A flying scratchpad. One shortcut. No chrome. No cloud.
 
-            ### Install
-            1. Download the `.dmg` for your Mac:
-               - **Apple Silicon (M1/M2/M3/M4):** `Junk-*-arm64.dmg`
-               - **Intel Mac:** `Junk-*-x64.dmg`
-            2. Open the `.dmg` → drag **Junk.app** to `/Applications`
-            3. First launch — strip the quarantine flag:
+            ### macOS (Apple Silicon)
             ```bash
+            # After dragging Junk.app to /Applications:
             xattr -rd com.apple.quarantine /Applications/Junk.app
             open /Applications/Junk.app
             ```
-            Or: right-click **Junk.app** → **Open** → **Open**
+            Then hit **⌘J** from anywhere.
 
-            > App is ad-hoc signed (not notarized). After first blocked attempt, Privacy & Security shows **Open Anyway**.
-          files: dist/*.dmg
+            ### macOS (Intel)
+            Same steps, use the `x64` DMG.
+
+            ### Windows
+            Run the `.exe` installer, then hit **Ctrl+J** from anywhere.
+
+            ### Linux
+            ```bash
+            chmod +x Junk-*.AppImage && ./Junk-*.AppImage
+            ```
+            Then hit **Ctrl+J** from anywhere.
+          files: dist/*
           draft: false
           prerelease: false

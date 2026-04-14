@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0] — 2026-04-14
+
+### Added
+- **Windows support** — NSIS installer + portable `.exe` via `Ctrl+J`
+- **Linux support** — AppImage + `.deb` via `Ctrl+J`
+- **README.txt inside the DMG** — explains the project, install steps, quarantine command, and architecture. Visible the moment you open the disk image
+- **Cross-platform CI** — 4 parallel GitHub Actions jobs (macOS arm64, macOS x64, Windows, Linux)
+- **Updated README** — platform badges, per-OS install instructions, CI table, full under-the-hood breakdown
+
+### Changed
+- DMG window widened to 620px to accommodate the README.txt icon
+- `Ctrl+J` / `Cmd+J` usage documented throughout
+
+---
+
 ## [1.4.0] — 2026-04-14
 
 ### Added
@@ -72,6 +87,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - GitHub Actions CI — builds `arm64` + `x64` `.dmg` on tag push
 - MIT license
 
+[1.5.0]: https://github.com/paulfxyz/junk/releases/tag/v1.5.0
 [1.4.0]: https://github.com/paulfxyz/junk/releases/tag/v1.4.0
 [1.3.0]: https://github.com/paulfxyz/junk/releases/tag/v1.3.0
 [1.2.0]: https://github.com/paulfxyz/junk/releases/tag/v1.2.0
