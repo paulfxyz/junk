@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<!--
+  Junk — frontend
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Architecture: single HTML file, zero build step, zero npm dependencies.
+
+  Why a single file?
+    Tauri can serve a directory of files, but for an app this simple a single
+    self-contained file is easier to read, audit, and distribute. The Rust
+    binary embeds it at compile time; there is no web server.
+
+  Styling strategy: CSS custom properties + a single @keyframes block.
+    No CSS framework — the entire visual surface is ~120 lines. Using a
+    framework (Tailwind, etc.) would introduce a build step and dozens of
+    kilobytes of unused rules.
+
+  JS strategy: vanilla ES2022 modules via <script type="module">.
+    No bundler. The Tauri IPC bridge (window.__TAURI__) is injected by the
+    WebView before our script runs, so we can call invoke() without any import.
+
+  Content persistence: localStorage.
+    The textarea content is saved to localStorage['junk-content'] with a 300ms
+    debounce on the 'input' event. This is identical to the Electron version.
+    No IPC is needed for persistence — the WebView's localStorage survives
+    window hide/show because we never destroy the window; we only hide it.
+
+  Why not IndexedDB?
+    For a scratchpad holding a few KB of text, localStorage is simpler, faster,
+    and synchronous. IndexedDB's async API would add complexity for no benefit.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Junk</title>
+
+  <!--
+    Space Grotesk — the typeface used in both the Electron and Rust versions.
+    We load only the weights we actually use (400 and 500) to minimise network
+    overhead during development. In production the font is fetched once and
+    cached by the WebView.
+
+    Why Space Grotesk?
+      It has the personality of a monospace code font (squared terminals, clear
+      letterforms) without the rigidity. At 22px with 1.80 line-height it feels
+      like writing on expensive paper.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    /* ── Reset ────────────────────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ── Root / body ─────────────────────────────────────────────────────── */
+    html,
+    body {
+      /* Transparent so the OS compositor shows through to the desktop.
+         The frosted-glass effect is achieved on .window, not on <body>. */
+      background: transparent;
+      overflow: hidden;           /* No scrollbars — the textarea scrolls internally */
+      width: 100vw;
+      height: 100vh;
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+    }
+
+    /* ── Fly-in animation ─────────────────────────────────────────────────
+       Why scale + translateY?
+         Pure scale animations feel like zooming into a webcam. Adding a
+         vertical offset (−10 px) creates a sense of the window floating up
+         from beneath the cursor — a subtle directional cue that "this thing
+         appeared". 180ms is fast enough to feel instant but long enough to
+         be perceptible.
+
+       cubic-bezier(0.22, 1, 0.36, 1) — "spring" easing
+         Control points (0.22,1) and (0.36,1) overshoot the target then
+         settle, mimicking a physical spring. It gives Junk a lively, high-
+         quality feel without needing a JS animation library.
+    ────────────────────────────────────────────────────────────────────── */
+    @keyframes fly-in {
+      from {
+        opacity: 0;
+        transform: scale(0.96) translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* ── .window — the frosted-glass card ────────────────────────────────
+       This element IS the visible window. It is inset 0px from all edges
+       because the OS window itself is transparent — .window provides the
+       visual chrome.
+
+       Frosted glass recipe:
+         1. backdrop-filter: blur + saturate — blurs what's behind the WebView
+            and boosts colour saturation so the blur doesn't look grey.
+         2. background: rgba(255,255,255,0.72) — semi-opaque white tint over
+            the blurred backdrop.
+         3. box-shadow — four layered shadows:
+              a. Soft wide ambient shadow (the "floating" effect)
+              b. Tighter mid-range shadow (depth)
+              c. Crisp inner bottom highlight (glass rim)
+              d. Inset top-edge highlight (specular — the "glass" illusion)
+
+       Why -webkit-app-region: drag?
+         Frameless windows have no title bar to drag by. This CSS property
+         tells the macOS/Windows compositor to treat the element as a drag
+         handle. We override it to 'no-drag' on interactive elements (the
+         textarea, footer links) so clicks still register normally.
+
+       On Windows/Linux: backdrop-filter may require hardware acceleration.
+       If the user's GPU driver doesn't support it, the browser silently
+       falls back to a plain white background — still readable, just not glassy.
+    ────────────────────────────────────────────────────────────────────── */
+    .window {
+      position: fixed;
+      inset: 0;
+      border-radius: 14px;
+      overflow: hidden;
+
+      /* Frosted glass */
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      background: rgba(255, 255, 255, 0.72);
+
+      /* Layered depth shadows */
+      box-shadow:
+        /* Ambient float */
+        0 32px 80px rgba(0, 0, 0, 0.22),
+        /* Mid-range depth */
+        0 8px 24px rgba(0, 0, 0, 0.12),
+        /* Inner bottom rim */
+        inset 0 -1px 0 rgba(0, 0, 0, 0.06),
+        /* Specular top highlight — the "glass" illusion */
+        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+
+      /* Border that reads as a glass edge */
+      border: 1px solid rgba(255, 255, 255, 0.60);
+
+      display: flex;
+      flex-direction: column;
+
+      /* Enable OS-level window dragging by default on the whole card.
+         Interactive children override this to 'no-drag'. */
+      -webkit-app-region: drag;
+      app-region: drag;
+
+      /* Fly-in on every show. The animation name is re-triggered in JS by
+         removing and re-adding the class — see triggerFlyIn(). */
+      animation: fly-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* ── Textarea ─────────────────────────────────────────────────────────
+       The entire writing surface. It fills all available space between
+       the top of .window and the footer.
+
+       Key decisions:
+         - resize: none — the window itself is resizable; the textarea
+           filling its parent achieves the same result without the ugly
+           resize grip.
+         - caret-color — matches the accent colour (indigo-ish blue) so
+           the cursor is clearly visible against the light background.
+         - -webkit-app-region: no-drag — without this, clicking into the
+           textarea would start a window drag instead of placing the cursor.
+    ────────────────────────────────────────────────────────────────────── */
+    #editor {
+      flex: 1;
+      width: 100%;
+      padding: 28px 32px 16px;
+
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1.80;
+      color: #1a1a2e;         /* Deep ink — readable but not harsh black */
+      letter-spacing: -0.01em;
+
+      /* Blinking cursor in the brand colour */
+      caret-color: #5b5bf6;
+
+      /* Allow normal text interaction (clicking, selecting) */
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+
+      /* Smooth scroll inside the textarea if content overflows */
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+    }
+
+    /* Placeholder — shown when the textarea is empty */
+    #editor::placeholder {
+      color: rgba(26, 26, 46, 0.30);
+      /* Same font metrics as the content so layout doesn't shift on first keypress */
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 1.80;
+    }
+
+    /* WebKit scrollbar styling (Chrome, Safari, macOS WebView) */
+    #editor::-webkit-scrollbar {
+      width: 4px;
+    }
+    #editor::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #editor::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.12);
+      border-radius: 2px;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────
+       Single-line hint bar at the bottom of the window. Uses a subtle
+       top border to visually separate it from the textarea without the
+       heaviness of a full divider line.
+
+       -webkit-app-region: no-drag is inherited from the .window override
+       NOT being applied here — actually we DO want the footer draggable
+       so users can drag the window by its footer. Only #editor gets no-drag.
+    ────────────────────────────────────────────────────────────────────── */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 36px;
+      padding: 0 24px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 11.5px;
+      font-weight: 500;
+      color: rgba(26, 26, 46, 0.38);
+      letter-spacing: 0.01em;
+      user-select: none;        /* Prevent accidental text selection on double-click */
+      -webkit-user-select: none;
+    }
+
+    /* Separator dots between footer items */
+    .footer-sep {
+      opacity: 0.4;
+    }
+
+    /* Subtle pulse on the auto-save indicator when content is actively saving */
+    @keyframes save-pulse {
+      0%, 100% { opacity: 0.38; }
+      50%       { opacity: 0.70; }
+    }
+
+    .saving {
+      animation: save-pulse 600ms ease-in-out 2;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- .window is the visible glass card. Its children are the editor and footer. -->
+  <div class="window" id="window">
+
+    <!--
+      The textarea is the ONLY interactive element. No buttons, no toolbar.
+      Junk is as minimal as possible — the entire UI is "type here".
+
+      placeholder: shown until the user types anything. The shortcut hint
+      reminds new users how to dismiss the window without reaching for the
+      mouse.
+    -->
+    <textarea
+      id="editor"
+      spellcheck="true"
+      autocomplete="off"
+      autocorrect="on"
+      autocapitalize="sentences"
+      placeholder="Start typing… (Esc or ⌘J to close)"
+    ></textarea>
+
+    <!-- Status bar: keyboard shortcuts and save indicator -->
+    <footer class="footer">
+      <span>⌘J toggle</span>
+      <span class="footer-sep">·</span>
+      <span>esc close</span>
+      <span class="footer-sep">·</span>
+      <span id="save-status">auto-saved</span>
+    </footer>
+
+  </div>
+
+  <!--
+    type="module" gives us:
+      1. Strict mode automatically
+      2. Top-level await (if needed in future)
+      3. A clean module scope — no globals leak into the page
+
+    defer is implied by type="module" so the script runs after the DOM is parsed.
+  -->
+  <script type="module">
+    // ── Tauri IPC bridge ────────────────────────────────────────────────────
+    //
+    // Tauri v2 injects `window.__TAURI__` into every WebView before any user
+    // script runs. The `core` sub-namespace provides `invoke()` for calling
+    // Rust #[tauri::command] functions.
+    //
+    // Why do we access it through window.__TAURI__ rather than importing from
+    // @tauri-apps/api?
+    //   Because we have no bundler. @tauri-apps/api is an npm package that
+    //   requires a build step (Vite, webpack, etc.). For a single-file app
+    //   the global is simpler and equally correct — it is the same code path
+    //   under the hood.
+    //
+    // We pull `invoke` out once at startup and use it as a regular function.
+    // If somehow __TAURI__ is not present (e.g. opening index.html in a regular
+    // browser during development), we shim it with a no-op so the rest of the
+    // code runs without errors.
+    const invoke = window.__TAURI__?.core?.invoke ?? (async () => {});
+
+    // ── DOM references ──────────────────────────────────────────────────────
+    // Cached once at startup — no repeated querySelector in hot paths.
+    const editor     = /** @type {HTMLTextAreaElement} */ (document.getElementById('editor'));
+    const saveStatus = document.getElementById('save-status');
+    const windowEl   = document.getElementById('window');
+
+    // ── localStorage key ────────────────────────────────────────────────────
+    // Using a namespaced key avoids collisions with other apps that might use
+    // the same WebView profile (unlikely, but defensive).
+    const STORAGE_KEY = 'junk-content';
+
+    // ── Content persistence ─────────────────────────────────────────────────
+
+    /**
+     * Load saved content from localStorage and populate the textarea.
+     *
+     * Called once on startup. If no saved content exists, the textarea stays
+     * empty and shows the placeholder.
+     */
+    function loadContent() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved !== null) {
+        editor.value = saved;
+      }
+    }
+
+    /** Debounce timer handle — cleared and reset on every keystroke. */
+    let saveTimer = null;
+
+    /**
+     * Save the current textarea content to localStorage.
+     *
+     * We update the save-status indicator to give the user visual feedback.
+     * The "saving…" state pulses briefly then reverts to "auto-saved".
+     */
+    function saveContent() {
+      localStorage.setItem(STORAGE_KEY, editor.value);
+
+      // Pulse animation signals that a save happened
+      saveStatus.textContent = 'auto-saved';
+      saveStatus.classList.remove('saving');
+      // Force a reflow so removing + re-adding the class re-triggers the animation
+      void saveStatus.offsetWidth;
+      saveStatus.classList.add('saving');
+    }
+
+    /**
+     * Debounced save — schedules a save 300ms after the last keystroke.
+     *
+     * Why debounce?
+     *   localStorage writes are synchronous and block the main thread for
+     *   a few microseconds each. For short content that's imperceptible, but
+     *   debouncing at 300ms is still good practice: it batches rapid typing
+     *   into a single write and matches what users expect from "auto-save"
+     *   (not "save every character").
+     */
+    function scheduleSave() {
+      if (saveTimer !== null) {
+        clearTimeout(saveTimer);
+      }
+      saveTimer = setTimeout(saveContent, 300);
+    }
+
+    // ── Window focus helpers ────────────────────────────────────────────────
+
+    /**
+     * Move the textarea cursor to the end of the content and focus the element.
+     *
+     * Called every time the window is shown via the global shortcut. This
+     * means the user can always keep typing immediately — no click required.
+     *
+     * Why move to the end?
+     *   When you summon a scratchpad you almost always want to append a new
+     *   thought, not edit the middle of an old one. Moving to the end optimises
+     *   for that 95% case.
+     */
+    function focusEditor() {
+      editor.focus({ preventScroll: false });
+      // selectionStart/End at length positions the cursor after the last char
+      const len = editor.value.length;
+      editor.setSelectionRange(len, len);
+    }
+
+    // ── Fly-in animation re-trigger ─────────────────────────────────────────
+
+    /**
+     * Re-trigger the fly-in CSS animation each time the window is shown.
+     *
+     * CSS animations only play once per element lifecycle unless you reset them.
+     * The canonical trick is:
+     *   1. Remove the animation name (the browser stops tracking the animation)
+     *   2. Force a style recalculation (reflow) — otherwise the browser may
+     *      batch the two style changes together and never see step 1
+     *   3. Re-add the animation name (a fresh animation starts)
+     *
+     * We wrap this in requestAnimationFrame to ensure the animation starts in
+     * the next paint frame rather than the current one (avoids a rare flash
+     * on some WebView versions).
+     */
+    function triggerFlyIn() {
+      requestAnimationFrame(() => {
+        windowEl.style.animationName = 'none';   // Step 1: remove
+        void windowEl.offsetWidth;               // Step 2: force reflow
+        windowEl.style.animationName = '';        // Step 3: restore → re-triggers
+      });
+    }
+
+    // ── Hide the window ─────────────────────────────────────────────────────
+
+    /**
+     * Ask Rust to hide the window via the IPC bridge.
+     *
+     * We call the `hide_window` Rust command rather than using a JS-only
+     * approach because hiding is an OS-level window operation — JavaScript
+     * alone cannot hide a native window.
+     *
+     * This is fire-and-forget from the frontend's perspective. If the IPC call
+     * fails (extremely unlikely), the window simply doesn't hide — no crash.
+     */
+    async function hideWindow() {
+      try {
+        await invoke('hide_window');
+      } catch (err) {
+        // Log to the WebView console — visible in Tauri devtools (F12 in dev)
+        console.warn('hide_window IPC failed:', err);
+      }
+    }
+
+    // ── Keyboard handlers ───────────────────────────────────────────────────
+
+    /**
+     * Global keydown listener — attached to the document so it fires
+     * regardless of which element has focus.
+     *
+     * Handled keys:
+     *   Escape        → hide the window
+     *   Cmd+J / Ctrl+J → hide the window (belt-and-suspenders — the OS-level
+     *                    shortcut from Rust also fires, but we want instant
+     *                    response even if there's IPC latency on the Rust side)
+     *
+     * Why document-level and not window-level?
+     *   The textarea captures key events before they bubble to `window`. Using
+     *   `document` with `capture: true` (third argument to addEventListener)
+     *   intercepts at the capture phase — before the textarea sees the event —
+     *   so Esc always works even when the textarea is focused.
+     */
+    document.addEventListener('keydown', (e) => {
+      // Escape — hide
+      if (e.key === 'Escape') {
+        e.preventDefault();   // Prevent browsers from doing default Esc behaviour
+        hideWindow();
+        return;
+      }
+
+      // Cmd+J (macOS) or Ctrl+J (Windows/Linux) — also hide
+      const isMeta = e.metaKey || e.ctrlKey;
+      if (isMeta && e.key === 'j') {
+        e.preventDefault();   // Prevent default browser behaviour (if any)
+        hideWindow();
+        return;
+      }
+    }, { capture: true }); // capture: true → fires before textarea sees the event
+
+    // ── Paste anywhere ──────────────────────────────────────────────────────
+
+    /**
+     * "Paste anywhere" handler — if the user pastes (Cmd+V / Ctrl+V) while
+     * focus is NOT on the textarea, redirect the paste into the textarea.
+     *
+     * Use case: the user dismisses the window, copies something from another
+     * app, summons Junk again, and immediately pastes — possibly before they
+     * click into the textarea. This handler makes that workflow seamless.
+     *
+     * We intercept at the document level and only act if the textarea is not
+     * already focused (to avoid double-paste).
+     */
+    document.addEventListener('paste', (e) => {
+      if (document.activeElement === editor) {
+        // Textarea already focused — let the default paste behaviour handle it
+        return;
+      }
+
+      // Read text from the clipboard event's DataTransfer object.
+      // This is synchronous and works without the Clipboard API permission.
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text) return;
+
+      e.preventDefault();
+
+      // Insert at the current cursor position (or end if no selection)
+      const start = editor.selectionStart ?? editor.value.length;
+      const end   = editor.selectionEnd   ?? editor.value.length;
+      editor.value =
+        editor.value.slice(0, start) + text + editor.value.slice(end);
+
+      // Move cursor to after the pasted text
+      const newPos = start + text.length;
+      editor.setSelectionRange(newPos, newPos);
+
+      // Trigger save
+      scheduleSave();
+
+      // Focus the textarea so subsequent typing goes there
+      editor.focus();
+    });
+
+    // ── Tauri event listener — window shown ─────────────────────────────────
+
+    /**
+     * Listen for the Tauri 'tauri://focus' event which fires every time the
+     * window is brought to the foreground (shown + focused).
+     *
+     * This is the hook for re-running the fly-in animation and moving the
+     * cursor to the end.
+     *
+     * Why 'tauri://focus' and not a custom event?
+     *   Tauri emits this event natively whenever the webview gains focus. It's
+     *   the most reliable signal that the window has just been shown via the
+     *   global shortcut, because the shortcut callback calls set_focus() which
+     *   triggers this event.
+     *
+     * Note: `window.__TAURI__?.event?.listen` may be undefined when running
+     * in a regular browser for local development. The optional chaining
+     * gracefully skips the registration in that case.
+     */
+    if (window.__TAURI__?.event?.listen) {
+      window.__TAURI__.event.listen('tauri://focus', () => {
+        triggerFlyIn();
+        focusEditor();
+      });
+    } else {
+      // Development fallback: auto-focus when page loads in a regular browser
+      focusEditor();
+    }
+
+    // ── Textarea input handler ──────────────────────────────────────────────
+    editor.addEventListener('input', scheduleSave);
+
+    // ── Startup ─────────────────────────────────────────────────────────────
+
+    /**
+     * Initialise the app:
+     *   1. Load persisted content into the textarea
+     *   2. Focus the textarea (cursor at end)
+     *
+     * We do NOT trigger the fly-in here because the window starts hidden
+     * (visible: false in tauri.conf.json) — the animation will fire when the
+     * user first presses ⌘J and the 'tauri://focus' event arrives.
+     */
+    loadContent();
+    focusEditor();
+
+    console.info('[Junk] Frontend initialised. Press ⌘J to toggle.');
+  </script>
+</body>
+</html>

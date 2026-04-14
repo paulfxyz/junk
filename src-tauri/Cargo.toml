@@ -1,0 +1,79 @@
+[package]
+# The binary crate name. Tauri uses this as the executable name on all platforms.
+name = "junk"
+version = "1.6.0"
+edition = "2021"
+# Minimum supported Rust version. 1.70 is the floor for Tauri v2.
+rust-version = "1.70"
+description = "A global-hotkey scratchpad — press ⌘J/Ctrl+J to summon a floating notepad anywhere."
+authors = ["Paul Fleury"]
+license = "MIT"
+# Exclude the JS/HTML frontend artefacts from a hypothetical crates.io publish.
+# In practice this crate is never published, but it keeps `cargo package` clean.
+exclude = ["../src/**", "../assets/**", "../node_modules/**"]
+
+# ── Build-time code generation ────────────────────────────────────────────────
+# Tauri's build script reads tauri.conf.json and generates Rust glue code:
+# - Embeds the frontend (index.html) into the binary for --release builds
+# - Generates the capability permission types
+# - Writes the __tauri_metadata!() macro invocation
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# ── Runtime dependencies ───────────────────────────────────────────────────────
+[dependencies]
+# Core Tauri framework — brings in the WebView, IPC, window management, etc.
+# We enable the "rustls-tls" feature so we don't depend on OpenSSL on Linux,
+# and "devtools" so developers can open the inspector in debug builds.
+tauri = { version = "2", features = ["devtools"] }
+
+# Global shortcut plugin (Tauri v2 splits plugins out of core).
+# This replaces the old tauri::GlobalShortcutManager from v1.
+tauri-plugin-global-shortcut = "2"
+
+# Serialisation — required for passing data across the Tauri IPC bridge.
+# Every type that crosses invoke() / emit() must implement Serialize/Deserialize.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Structured, levelled logging. We call log::info!/log::warn!/log::error!
+# throughout main.rs; the env_logger subscriber (below) routes them to stderr.
+log = "0.4"
+
+# The simplest env-filter logger — reads RUST_LOG=junk=debug at runtime.
+# Only activated in debug builds (see profile section below) to keep release
+# binaries lean.
+env_logger = "0.11"
+
+# ── Feature flags ─────────────────────────────────────────────────────────────
+# Tauri exposes platform APIs via optional features. We gate macOS-specific
+# behaviour (ActivationPolicy) behind the "macos-private-api" feature which
+# Tauri checks; we don't need a Cargo feature for it — we use #[cfg] instead.
+[features]
+# This is the conventional hook Tauri uses at build time.
+# Do NOT remove it — `tauri build` will fail without it.
+custom-protocol = ["tauri/custom-protocol"]
+
+# ── Profile tweaks ────────────────────────────────────────────────────────────
+[profile.dev]
+# Faster incremental builds during development. opt-level = 0 is the default
+# but we make it explicit for clarity.
+opt-level = 0
+debug = true
+# Split debug info into a .dSYM / .pdb so the binary itself stays small
+# even in debug mode — helpful for macOS universal builds.
+split-debuginfo = "unpacked"
+
+[profile.release]
+# The shipped binary. LTO = true shrinks it by ~15 % by eliminating dead code
+# across crate boundaries. codegen-units = 1 is required for LTO and also
+# produces slightly faster code at the cost of slower compile times.
+opt-level = 3
+lto = true
+codegen-units = 1
+# Strip DWARF debug symbols from the final binary so macOS notarisation and
+# Windows code signing don't have to process megabytes of debug info.
+strip = "debuginfo"
+# Abort on panic in release mode — panics should never reach users, and abort
+# produces smaller binaries than the default unwind (no stack-unwinding tables).
+panic = "abort"

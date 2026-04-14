@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/schema/capability/2",
+
+  "identifier": "default",
+
+  "description": "Default capability set for Junk. Grants the minimum set of permissions required for the app to function: global shortcut registration, window show/hide/focus, and core IPC. No filesystem, no network, no shell — Junk stores content in localStorage (browser-native) and has no reason to touch the OS beyond these capabilities.",
+
+  "local": true,
+
+  "windows": ["main"],
+
+  "permissions": [
+    "core:default",
+
+    "core:window:allow-show",
+
+    "core:window:allow-hide",
+
+    "core:window:allow-set-focus",
+
+    "core:window:allow-is-visible",
+
+    "core:window:allow-start-dragging",
+
+    "core:webview:allow-set-webview-focus",
+
+    "global-shortcut:allow-register",
+
+    "global-shortcut:allow-unregister",
+
+    "global-shortcut:allow-is-registered"
+  ]
+}

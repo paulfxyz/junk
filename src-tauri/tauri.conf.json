@@ -1,0 +1,124 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+
+  "productName": "Junk",
+  "version": "1.6.0",
+
+  "identifier": "com.paulfleury.junk",
+
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../src"
+  },
+
+  "app": {
+    "security": {
+      "csp": null
+    },
+
+    "windows": [
+      {
+        "label": "main",
+
+        "title": "",
+
+        "width": 720,
+        "height": 460,
+
+        "resizable": true,
+        "fullscreen": false,
+
+        "center": true,
+
+        "decorations": false,
+
+        "transparent": true,
+
+        "alwaysOnTop": true,
+
+        "skipTaskbar": true,
+
+        "visible": false,
+
+        "focus": false,
+
+        "url": "index.html"
+      }
+    ]
+  },
+
+  "bundle": {
+    "active": true,
+
+    "targets": "all",
+
+    "identifier": "com.paulfleury.junk",
+
+    "publisher": "Paul Fleury",
+
+    "icon": [
+      "../assets/icons/32x32.png",
+      "../assets/icons/128x128.png",
+      "../assets/icons/128x128@2x.png",
+      "../assets/icons/icon.icns",
+      "../assets/icons/icon.ico"
+    ],
+
+    "resources": [],
+
+    "externalBin": [],
+
+    "copyright": "© 2024 Paul Fleury",
+
+    "category": "Productivity",
+
+    "shortDescription": "Global-hotkey scratchpad",
+
+    "longDescription": "Press ⌘J (macOS) or Ctrl+J (Windows/Linux) to summon a floating notepad anywhere on screen. Content auto-saves. No Dock icon, no Taskbar icon — pure scratchpad.",
+
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null,
+      "dmg": {
+        "background": null,
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationsPosition": { "x": 480, "y": 170 }
+      }
+    },
+
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "certificateThumbprint": null,
+      "timestampUrl": "",
+      "tsp": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "languages": ["English"]
+      }
+    },
+
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    }
+  }
+}
