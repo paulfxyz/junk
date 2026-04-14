@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "2.7.1"
+version = "2.8.0"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"

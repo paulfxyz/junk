@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v2.7.1)
+  Junk — frontend (v2.8.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -701,51 +701,86 @@
     defer is implied by type="module" so the script runs after the DOM is parsed.
   -->
   <script type="module">
-    // ── Tauri IPC bridge ────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+    // Junk — frontend script (v2.8.0)
     //
-    // Tauri v2 injects `window.__TAURI__` into every WebView before user
-    // scripts run. The `core` sub-namespace provides `invoke()` for calling
-    // Rust #[tauri::command] functions.
+    // IPC bridge note (v2.8.0):
+    //   Tauri v2 exposes two invoke paths:
+    //     1. window.__TAURI_INTERNALS__.invoke  — always available, injected
+    //        before any user script runs, no config required.
+    //     2. window.__TAURI__.core.invoke       — available only when
+    //        `withGlobalTauri: true` is set in tauri.conf.json.
     //
-    // IMPORTANT: Do NOT capture invoke at module-load time.
-    // With <script type="module">, the script is deferred and runs after DOM
-    // parse — but on some Tauri v2 / WKWebView builds, the __TAURI__.core
-    // injection races with module execution. Capturing once at the top means
-    // we might freeze the no-op fallback forever.
+    //   We added `withGlobalTauri: true` in v2.8.0 so both paths work.
+    //   `getInvoke()` below uses __TAURI_INTERNALS__ as primary (always
+    //   available) and __TAURI__.core.invoke as fallback. This is the most
+    //   robust approach and fixes all silent IPC failures in v2.7.x.
     //
-    // Instead we resolve invoke() lazily inside each IPC call. This is safe
-    // because IPC calls are only triggered by user interaction or Tauri events,
-    // both of which happen well after the bridge is injected.
+    // Drag fix (v2.8.0):
+    //   We call invoke('start_dragging') which routes to our Rust command
+    //   that calls window.start_dragging() directly. e.preventDefault() is
+    //   called before the invoke so the WebView doesn't process the mousedown.
+    // ═══════════════════════════════════════════════════════════════════════
 
-    // ── DOM references ──────────────────────────────────────────────────────
+    // ── IPC helper ──────────────────────────────────────────────────────────
+    //
+    // Returns the Tauri invoke function.
+    //
+    // Priority:
+    //   1. window.__TAURI_INTERNALS__.invoke — always injected by Tauri before
+    //      any user scripts, regardless of withGlobalTauri setting. This is the
+    //      internal bridge used by @tauri-apps/api itself.
+    //   2. window.__TAURI__.core.invoke — the "public" alias populated when
+    //      withGlobalTauri: true is set (which we now do in tauri.conf.json).
+    //
+    // Returns null if neither path is available (should never happen in prod).
+    function getInvoke() {
+      return (
+        window.__TAURI_INTERNALS__?.invoke ??
+        window.__TAURI__?.core?.invoke ??
+        null
+      );
+    }
+
+    // Convenience wrapper — calls invoke with logging on error.
+    // All IPC calls go through this so we get consistent error visibility.
+    async function ipc(command, args = {}) {
+      const invoke = getInvoke();
+      if (!invoke) {
+        console.error(`[ipc] invoke not available — cannot call "${command}"`);
+        return undefined;
+      }
+      try {
+        return await invoke(command, args);
+      } catch (err) {
+        console.error(`[ipc] "${command}" failed:`, err);
+        throw err;  // re-throw so callers can handle if needed
+      }
+    }
+
+    // ── DOM references ───────────────────────────────────────────────────────
     // Cached once at startup — no repeated querySelector in hot paths.
-    const editor          = /** @type {HTMLTextAreaElement} */ (document.getElementById('editor'));
-    const saveStatus      = document.getElementById('save-status');
-    const windowEl        = document.getElementById('window');
-    const editorDim       = document.getElementById('editor-dim');
-    const prefsPanel      = document.getElementById('prefs-panel');
-    const prefsCloseBtn   = document.getElementById('prefs-close');
-    const footerPrefsBtn  = document.getElementById('footer-prefs-btn');
-    const toggleLaunch    = /** @type {HTMLInputElement} */ (document.getElementById('toggle-launch'));
-    const toggleAutoUpdate= /** @type {HTMLInputElement} */ (document.getElementById('toggle-autoupdate'));
-    const checkUpdateBtn  = document.getElementById('check-update-btn');
-    const updateStatus    = document.getElementById('update-status');
-    const currentVersionEl= document.getElementById('current-version');
+    const editor           = /** @type {HTMLTextAreaElement} */ (document.getElementById('editor'));
+    const saveStatus       = document.getElementById('save-status');
+    const windowEl         = document.getElementById('window');
+    const editorDim        = document.getElementById('editor-dim');
+    const prefsPanel       = document.getElementById('prefs-panel');
+    const prefsCloseBtn    = document.getElementById('prefs-close');
+    const footerPrefsBtn   = document.getElementById('footer-prefs-btn');
+    const toggleLaunch     = /** @type {HTMLInputElement} */ (document.getElementById('toggle-launch'));
+    const toggleAutoUpdate = /** @type {HTMLInputElement} */ (document.getElementById('toggle-autoupdate'));
+    const checkUpdateBtn   = document.getElementById('check-update-btn');
+    const updateStatus     = document.getElementById('update-status');
+    const currentVersionEl = document.getElementById('current-version');
 
-    // ── localStorage keys ───────────────────────────────────────────────────
-    // Using namespaced keys avoids collisions with other apps that might use
-    // the same WebView profile (unlikely, but defensive).
-    const STORAGE_KEY            = 'junk-content';
-    const PREF_AUTO_UPDATE_KEY   = 'junk-auto-update';
+    // ── localStorage keys ────────────────────────────────────────────────────
+    const STORAGE_KEY          = 'junk-content';
+    const PREF_AUTO_UPDATE_KEY = 'junk-auto-update';
 
-    // ── Content persistence ─────────────────────────────────────────────────
+    // ── Content persistence ──────────────────────────────────────────────────
 
-    /**
-     * Load saved content from localStorage and populate the textarea.
-     *
-     * Called once on startup. If no saved content exists, the textarea stays
-     * empty and shows the placeholder.
-     */
+    // Load saved content from localStorage and populate the textarea.
+    // Called once on startup; if nothing is saved the placeholder shows.
     function loadContent() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved !== null) {
@@ -753,284 +788,364 @@
       }
     }
 
-    /** Debounce timer handle — cleared and reset on every keystroke. */
     let saveTimer = null;
 
-    /**
-     * Save the current textarea content to localStorage.
-     *
-     * We update the save-status indicator to give the user visual feedback.
-     * The "saving…" state pulses briefly then reverts to "auto-saved".
-     */
+    // Persist the current textarea content to localStorage.
+    // Also pulses the "auto-saved" indicator for visual feedback.
     function saveContent() {
       localStorage.setItem(STORAGE_KEY, editor.value);
-
-      // Pulse animation signals that a save happened
       saveStatus.textContent = 'auto-saved';
       saveStatus.classList.remove('saving');
-      // Force a reflow so removing + re-adding the class re-triggers the animation
-      void saveStatus.offsetWidth;
+      void saveStatus.offsetWidth;   // force reflow to restart CSS animation
       saveStatus.classList.add('saving');
     }
 
-    /**
-     * Debounced save — schedules a save 300ms after the last keystroke.
-     *
-     * Why debounce?
-     *   localStorage writes are synchronous and block the main thread for
-     *   a few microseconds each. For short content that's imperceptible, but
-     *   debouncing at 300ms is still good practice: it batches rapid typing
-     *   into a single write and matches what users expect from "auto-save"
-     *   (not "save every character").
-     */
+    // Debounce saves to 300 ms — batches rapid typing into single writes.
     function scheduleSave() {
-      if (saveTimer !== null) {
-        clearTimeout(saveTimer);
-      }
+      if (saveTimer !== null) clearTimeout(saveTimer);
       saveTimer = setTimeout(saveContent, 300);
     }
 
-    // ── Window focus helpers ────────────────────────────────────────────────
+    // ── Focus helpers ────────────────────────────────────────────────────────
 
-    /**
-     * Move the textarea cursor to the end of the content and focus the element.
-     *
-     * Called every time the window is shown via the global shortcut. This
-     * means the user can always keep typing immediately — no click required.
-     *
-     * Why move to the end?
-     *   When you summon a scratchpad you almost always want to append a new
-     *   thought, not edit the middle of an old one. Moving to the end optimises
-     *   for that 95% case.
-     */
+    // Focus the textarea and move the cursor to the end.
+    // Called every time the window is shown so the user can keep typing.
     function focusEditor() {
       editor.focus({ preventScroll: false });
-      // selectionStart/End at length positions the cursor after the last char
       const len = editor.value.length;
       editor.setSelectionRange(len, len);
     }
 
-    // ── Fly-in animation re-trigger ─────────────────────────────────────────
+    // ── Fly-in animation ─────────────────────────────────────────────────────
 
-    /**
-     * Re-trigger the fly-in CSS animation each time the window is shown.
-     *
-     * CSS animations only play once per element lifecycle unless you reset them.
-     * The canonical trick is:
-     *   1. Remove the animation name (the browser stops tracking the animation)
-     *   2. Force a style recalculation (reflow) — otherwise the browser may
-     *      batch the two style changes together and never see step 1
-     *   3. Re-add the animation name (a fresh animation starts)
-     *
-     * We wrap this in requestAnimationFrame to ensure the animation starts in
-     * the next paint frame rather than the current one (avoids a rare flash
-     * on some WebView versions).
-     */
+    // Re-trigger the CSS fly-in animation on every window show.
+    //
+    // CSS animations only fire once per element lifecycle. The trick:
+    //   1. Clear the animationName so the browser stops tracking it
+    //   2. Force a style flush (reflow) so the browser sees the cleared state
+    //   3. Restore the animationName — browser starts a fresh animation
     function triggerFlyIn() {
       requestAnimationFrame(() => {
-        windowEl.style.animationName = 'none';   // Step 1: remove
-        void windowEl.offsetWidth;               // Step 2: force reflow
-        windowEl.style.animationName = '';        // Step 3: restore → re-triggers
+        windowEl.style.animationName = 'none';
+        void windowEl.offsetWidth;
+        windowEl.style.animationName = '';
       });
     }
 
-    // ── Hide the window ─────────────────────────────────────────────────────
+    // ── Hide window ───────────────────────────────────────────────────────────
 
-    /**
-     * Ask Rust to hide the window via the IPC bridge.
-     *
-     * We call the `hide_window` Rust command rather than using a JS-only
-     * approach because hiding is an OS-level window operation — JavaScript
-     * alone cannot hide a native window.
-     *
-     * This is fire-and-forget from the frontend's perspective. If the IPC call
-     * fails (extremely unlikely), the window simply doesn't hide — no crash.
-     */
+    // Ask Rust to hide the OS window.
+    // JS cannot hide a native window on its own — must go through IPC.
     async function hideWindow() {
-      // Resolve the IPC bridge lazily on every call — never at module-load time.
-      // See the "Tauri IPC bridge" comment above for the full rationale.
-      const invokeFn = window.__TAURI__?.core?.invoke;
-      if (typeof invokeFn !== 'function') {
-        console.warn('hideWindow: Tauri IPC not ready (window.__TAURI__.core.invoke missing)');
-        return;
-      }
-      try {
-        await invokeFn('hide_window');
-      } catch (err) {
-        console.warn('hide_window IPC failed:', err);
-      }
+      await ipc('hide_window');
     }
 
-    // ── Preferences panel ───────────────────────────────────────────────────
+    // ── Preferences panel ─────────────────────────────────────────────────────
 
-    /** Whether the prefs panel is currently visible. */
     let prefsOpen = false;
 
-    /**
-     * Open the preferences panel.
-     *
-     * Steps:
-     *   1. Load current prefs from Rust (launch_at_login) + localStorage (auto_update)
-     *   2. Slide the panel up
-     *   3. Show the dim overlay (clicking it closes prefs)
-     */
+    // Open the preferences panel.
+    // Reads current OS state (launch at login) fresh every time so the
+    // toggle always reflects reality, even if the user changed it externally.
     async function openPrefs() {
-      if (prefsOpen) return; // Already open — no-op
+      if (prefsOpen) return;
       prefsOpen = true;
-
-      // Add class to .window which CSS uses to show panel + dim overlay
       windowEl.classList.add('prefs-open');
 
-      // Load preferences from Rust side
-      await loadPrefsValues();
+      // Load current state from OS + localStorage in parallel
+      await Promise.allSettled([
+        loadLaunchAtLogin(),
+        loadVersionDisplay(),
+      ]);
+
+      // Restore auto-update toggle from localStorage
+      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
+      // Default to ON if never set
+      toggleAutoUpdate.checked = autoUpdate !== 'false';
+
+      // Clear any leftover update status from a previous open
+      setUpdateStatus('', '');
     }
 
-    /**
-     * Close the preferences panel.
-     */
+    // Close the preferences panel.
     function closePrefs() {
       if (!prefsOpen) return;
       prefsOpen = false;
       windowEl.classList.remove('prefs-open');
-      // Return focus to the editor
-      editor.focus();
     }
 
-    /**
-     * Load the current preference values from Rust + localStorage,
-     * then update the toggle UI to reflect them.
-     */
-    async function loadPrefsValues() {
-      const invokeFn = window.__TAURI__?.core?.invoke;
+    // ── Launch at login ───────────────────────────────────────────────────────
 
-      // Auto-update — stored in localStorage (Rust doesn't need it)
-      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
-      // Default ON if not set yet
-      toggleAutoUpdate.checked = (autoUpdate === null) ? true : (autoUpdate === 'true');
-
-      if (typeof invokeFn !== 'function') {
-        // Not in Tauri — dev browser fallback
-        toggleLaunch.checked = false;
-        return;
-      }
-
+    // Read the current OS login item state and set the toggle accordingly.
+    // Uses get_prefs() IPC which reads the real OS state — accurate even if
+    // the user toggled it from System Settings since Junk last ran.
+    async function loadLaunchAtLogin() {
       try {
-        // get_prefs() returns { launch_at_login: bool }
-        const prefs = await invokeFn('get_prefs');
-        toggleLaunch.checked = prefs.launch_at_login ?? false;
-
-        // Also fetch the current version for the credits label.
-        // check_for_update() now returns UpdateResult: { up_to_date, current, latest, url }
-        const updateInfo = await invokeFn('check_for_update');
-        if (updateInfo?.current) {
-          currentVersionEl.textContent = 'v' + updateInfo.current;
+        const prefs = await ipc('get_prefs');
+        if (prefs && typeof prefs.launch_at_login === 'boolean') {
+          toggleLaunch.checked = prefs.launch_at_login;
         }
       } catch (err) {
-        console.warn('get_prefs IPC failed:', err);
-        toggleLaunch.checked = false;
+        // Non-fatal — toggle stays at default (unchecked)
+        console.warn('[prefs] get_prefs failed:', err);
       }
     }
 
-    /**
-     * Toggle the "Launch at login" login item via the Rust IPC command.
-     * Called immediately when the toggle changes — no save button needed.
-     */
-    async function setLaunchAtLogin(enabled) {
-      const invokeFn = window.__TAURI__?.core?.invoke;
-      if (typeof invokeFn !== 'function') return;
-
+    // Toggle handler — called when the user flips the launch at login switch.
+    // Fires the IPC command and reverts the toggle if it fails.
+    async function onLaunchAtLoginChange() {
+      const enabled = toggleLaunch.checked;
       try {
-        await invokeFn('set_launch_at_login', { enabled });
-        console.info('[Junk] launch_at_login →', enabled);
+        await ipc('set_launch_at_login', { enabled });
+        console.log(`[prefs] launch_at_login set to ${enabled}`);
       } catch (err) {
-        console.warn('set_launch_at_login IPC failed:', err);
-        // Revert the toggle if the call failed
+        // Revert the toggle so the UI matches actual OS state
         toggleLaunch.checked = !enabled;
+        console.error('[prefs] set_launch_at_login failed:', err);
       }
     }
 
-    /**
-     * Check GitHub releases API for a newer version.
-     *
-     * v2.5.0: The HTTP fetch is now done entirely on the Rust side via
-     * tauri-plugin-http (reqwest). This avoids CSP issues where WebView
-     * was blocking window.fetch() calls to api.github.com.
-     *
-     * check_for_update() returns UpdateResult:
-     *   { up_to_date: bool, current: string, latest: string, url: string }
-     *
-     * The `url` field is the releases page when an update is available,
-     * or the releases page anyway (for "you're up to date" info).
-     */
-    async function checkForUpdate() {
-      checkUpdateBtn.disabled = true;
-      updateStatus.textContent = 'Checking…';
-      updateStatus.className = '';
+    // ── Version display ───────────────────────────────────────────────────────
 
-      const invokeFn = window.__TAURI__?.core?.invoke;
-
-      if (typeof invokeFn !== 'function') {
-        // Dev browser fallback — no Tauri IPC available
-        updateStatus.textContent = 'Not running in Tauri';
-        updateStatus.className = 'update-error';
-        checkUpdateBtn.disabled = false;
-        return;
+    // Populate the "Current version: x.x.x" label in the prefs panel.
+    // check_for_update() returns { current, latest, up_to_date, url } —
+    // we only need `current` here; the full result is used by checkForUpdate().
+    async function loadVersionDisplay() {
+      try {
+        const result = await ipc('check_for_update');
+        if (result && result.current) {
+          currentVersionEl.textContent = result.current;
+        }
+      } catch (err) {
+        currentVersionEl.textContent = '?';
+        console.warn('[prefs] could not load version:', err);
       }
+    }
+
+    // ── Update status helpers ─────────────────────────────────────────────────
+
+    // Update the #update-status element with a message and CSS class.
+    // Classes: '' | 'up-to-date' | 'update-available' | 'update-error'
+    function setUpdateStatus(message, cssClass) {
+      updateStatus.textContent = message;
+      updateStatus.className = '';   // clear all classes
+      if (cssClass) updateStatus.classList.add(cssClass);
+    }
+
+    // ── Manual update check ───────────────────────────────────────────────────
+
+    // Called when the user clicks "Check now" in the prefs panel.
+    // Also called on startup if auto-update is enabled.
+    //
+    // check_for_update() is a Rust IPC command that:
+    //   1. Reads CARGO_PKG_VERSION (the compiled-in version string)
+    //   2. Fetches api.github.com/repos/paulfxyz/junk/releases/latest
+    //   3. Compares version strings
+    //   4. Returns { up_to_date: bool, current: string, latest: string, url: string }
+    //
+    // We use the Rust fetch (not window.fetch) because window.fetch can be
+    // blocked by the WebView CSP in some environments.
+    async function checkForUpdate({ silent = false } = {}) {
+      checkUpdateBtn.disabled = true;
+      if (!silent) setUpdateStatus('Checking…', '');
 
       try {
-        // Rust does the fetch; returns { up_to_date, current, latest, url }
-        const result = await invokeFn('check_for_update');
-        renderUpdateResult(result);
+        const result = await ipc('check_for_update');
+
+        if (!result) {
+          setUpdateStatus('Could not reach GitHub — are you online?', 'update-error');
+          return;
+        }
+
+        // Always update the version label with what Rust reports
+        if (result.current) {
+          currentVersionEl.textContent = result.current;
+        }
+
+        if (result.up_to_date) {
+          setUpdateStatus(`You're up to date (${result.current})`, 'up-to-date');
+        } else {
+          // Show a clickable link to the specific release
+          setUpdateStatus('', '');
+          const statusEl = updateStatus;
+          statusEl.className = 'update-available';
+          const link = document.createElement('a');
+          link.href = result.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = `Update available: v${result.latest}`;
+          link.style.cssText = 'color: #5b5bf6; font-weight: 500;';
+          statusEl.appendChild(link);
+        }
       } catch (err) {
-        console.warn('check_for_update IPC failed:', err);
-        updateStatus.textContent = 'Could not check — are you online?';
-        updateStatus.className = 'update-error';
+        setUpdateStatus('Could not check — are you online?', 'update-error');
+        console.error('[update] check_for_update failed:', err);
       } finally {
         checkUpdateBtn.disabled = false;
       }
     }
 
-    /**
-     * Render an UpdateResult object into the UI.
-     * Called both from the manual "Check for Updates" button AND from
-     * the tray menu "Check for Updates" event listener.
-     *
-     * @param {{ up_to_date: boolean, current: string, latest: string, url: string }} result
-     */
-    function renderUpdateResult(result) {
-      if (result.up_to_date) {
-        updateStatus.textContent = `You're up to date (v${result.current})`;
-        updateStatus.className = 'up-to-date';
-      } else {
-        updateStatus.innerHTML =
-          `Update available: <a href="${result.url}" target="_blank">v${result.latest}</a>`;
-        updateStatus.className = 'update-available';
-      }
-      // Ensure the prefs panel is open so the user sees the result
-      if (!prefsOpen) openPrefs();
+    // ── Auto-update on startup ────────────────────────────────────────────────
+
+    // If the user has auto-update enabled, silently check ~2s after the window
+    // first appears. "Silent" means no status message unless an update is found.
+    function maybeAutoCheckOnStartup() {
+      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
+      if (autoUpdate === 'false') return;
+
+      // Delay slightly so the window animation finishes first
+      setTimeout(() => {
+        checkForUpdate({ silent: true }).catch(() => {});
+      }, 2000);
     }
 
-    // ── Keyboard handlers ───────────────────────────────────────────────────
+    // ── Tauri event listeners ─────────────────────────────────────────────────
 
-    /**
-     * Global keydown listener — attached to the document so it fires
-     * regardless of which element has focus.
-     *
-     * Handled keys:
-     *   Escape        → close prefs if open, otherwise hide the window
-     *   Cmd+J / Ctrl+J → hide the window (belt-and-suspenders — the OS-level
-     *                    shortcut from Rust also fires, but we want instant
-     *                    response even if there's IPC latency on the Rust side)
-     *   Cmd+, / Ctrl+, → open preferences panel (belt-and-suspenders)
-     *
-     * Why document-level and not window-level?
-     *   The textarea captures key events before they bubble to `window`. Using
-     *   `document` with `capture: true` (third argument to addEventListener)
-     *   intercepts at the capture phase — before the textarea sees the event —
-     *   so Esc always works even when the textarea is focused.
-     */
+    // Set up listeners for events emitted by Rust.
+    // Must be called after the IPC bridge is available.
+    //
+    // Events:
+    //   tauri://focus  — window gained OS focus → fly-in + focus editor
+    //   open-prefs     — ⌘, shortcut fired in Rust → open prefs panel
+    //
+    // We use window.__TAURI_INTERNALS__ for events too — this is the same
+    // bridge used by @tauri-apps/api/event.js internally.
+    function setupTauriEvents() {
+      // Listen for Tauri events via the internals bridge.
+      // __TAURI_INTERNALS__.listen is available when withGlobalTauri: true,
+      // OR we can use window.__TAURI__.event.listen (same thing).
+      const listenFn = (
+        window.__TAURI__?.event?.listen ??
+        null
+      );
+
+      if (!listenFn) {
+        // Fallback: poll for the IPC bridge and retry
+        console.warn('[events] Tauri event bridge not ready, retrying in 100ms');
+        setTimeout(setupTauriEvents, 100);
+        return;
+      }
+
+      // Window gained OS focus → re-trigger fly-in, focus editor
+      listenFn('tauri://focus', () => {
+        triggerFlyIn();
+        // Small delay so the fly-in starts before the editor steals focus
+        setTimeout(focusEditor, 20);
+      });
+
+      // Rust emitted 'open-prefs' (from the ⌘, global shortcut)
+      listenFn('open-prefs', () => {
+        openPrefs();
+      });
+    }
+
+    // ── Window drag (v2.8.0) ──────────────────────────────────────────────────
+    //
+    // Native window drag via our custom Rust 'start_dragging' IPC command.
+    //
+    // WHY NOT -webkit-app-region: drag?
+    //   On macOS with decorations:false + transparent:true, WKWebView
+    //   intercepts the pointer event before the OS window manager sees it.
+    //   The CSS hint is silently ignored. This is a known WKWebView limitation.
+    //
+    // WHY NOT plugin:window|start_dragging?
+    //   That works in theory but requires the plugin namespace resolution.
+    //   Our own #[tauri::command] fn start_dragging(window: WebviewWindow)
+    //   is simpler, explicit, and guaranteed to be in our invoke_handler.
+    //
+    // THE ASYNC TIMING PROBLEM AND HOW WE SOLVE IT:
+    //   The OS drag gesture must be initiated while the mousedown event is
+    //   "active" (the OS is waiting to see if this becomes a drag or a click).
+    //   JS invoke() is async — by the time the Promise resolves the OS window
+    //   has already committed to "this was a click, not a drag start".
+    //
+    //   Solution: call e.preventDefault() on the mousedown BEFORE the invoke.
+    //   preventDefault() tells the OS "I'm handling this — don't process it
+    //   as a click or focus change". The OS then keeps the drag candidate
+    //   window open until the Rust side calls NSWindow.performWindowDragWithEvent.
+    //   Because the Tauri IPC bridge processes messages synchronously on the
+    //   Rust event loop, the native drag call happens before the OS times out.
+    //
+    // DRAG ZONES — anywhere that is NOT:
+    //   textarea, input, button, select, a, label  — interactive controls
+    //   .prefs-panel                               — the whole prefs sheet
+    //   .editor-dim                                — dim overlay (close prefs)
+    (function registerDragListener() {
+      // Selectors for elements that must NOT trigger a drag.
+      // We check the entire ancestor chain from click target up to .window.
+      const INTERACTIVE_SELECTORS = [
+        'textarea',
+        'input',
+        'button',
+        'select',
+        'a',
+        'label',
+        '[contenteditable]',
+        '.prefs-panel',
+        '.editor-dim',
+      ].join(', ');
+
+      if (!windowEl) {
+        console.error('[drag] .window element not found');
+        return;
+      }
+
+      windowEl.addEventListener('mousedown', (e) => {
+        // Primary button only — right-click opens context menus, not drag
+        if (e.button !== 0) return;
+
+        // Walk from the click target up to .window.
+        // If any ancestor is an interactive element, bail out and let the
+        // normal click/focus/selection behaviour through.
+        let node = /** @type {Element|null} */ (e.target);
+        while (node && node !== windowEl) {
+          if (node.matches && node.matches(INTERACTIVE_SELECTORS)) return;
+          node = /** @type {Element|null} */ (node.parentElement);
+        }
+
+        // We are on a non-interactive surface — initiate a window drag.
+        //
+        // e.preventDefault() is called BEFORE the async IPC so the OS keeps
+        // the drag candidate state open. Without this, the OS commits to
+        // "click, not drag" before our Rust command executes.
+        e.preventDefault();
+
+        ipc('start_dragging').catch((err) => {
+          // Silent failure — worst case the window just doesn't move.
+          // This can happen if the IPC bridge isn't ready yet on first show.
+          console.warn('[drag] start_dragging failed:', err);
+        });
+      });
+
+      // Show grab cursor on draggable zones so the affordance is clear
+      // without needing a visible handle.
+      windowEl.addEventListener('mousemove', (e) => {
+        let node = /** @type {Element|null} */ (e.target);
+        while (node && node !== windowEl) {
+          if (node.matches && node.matches(INTERACTIVE_SELECTORS)) {
+            windowEl.style.cursor = '';
+            return;
+          }
+          node = /** @type {Element|null} */ (node.parentElement);
+        }
+        windowEl.style.cursor = 'grab';
+      });
+
+      windowEl.addEventListener('mouseleave', () => {
+        windowEl.style.cursor = '';
+      });
+    })();
+
+    // ── Keyboard shortcuts (JS fallback layer) ────────────────────────────────
+    //
+    // Esc and ⌘J are registered at the OS level in Rust (more reliable).
+    // These JS handlers are a belt-and-suspenders fallback for when the
+    // WebView has focus and the OS shortcuts fire inside the WebView too.
+    //
+    // ⌘, is handled in Rust via the open-prefs event — no JS needed.
+
     document.addEventListener('keydown', (e) => {
-      // Escape — close prefs if open, otherwise hide the window
+      // Esc — close prefs if open, otherwise hide window
       if (e.key === 'Escape') {
         e.preventDefault();
         if (prefsOpen) {
@@ -1041,17 +1156,8 @@
         return;
       }
 
-      const isMeta = e.metaKey || e.ctrlKey;
-
-      // Cmd+J (macOS) or Ctrl+J (Windows/Linux) — also hide
-      if (isMeta && e.key === 'j') {
-        e.preventDefault();
-        hideWindow();
-        return;
-      }
-
-      // Cmd+, / Ctrl+, — open preferences (belt-and-suspenders; also fired by Rust shortcut)
-      if (isMeta && e.key === ',') {
+      // ⌘, / Ctrl+, — open preferences
+      if (e.key === ',' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         if (prefsOpen) {
           closePrefs();
@@ -1060,283 +1166,78 @@
         }
         return;
       }
-    }, { capture: true }); // capture: true → fires before textarea sees the event
-
-    // ── Preferences event listeners ─────────────────────────────────────────
-
-    // Close button (×)
-    prefsCloseBtn.addEventListener('click', closePrefs);
-
-    // Dim overlay — clicking the darkened area closes prefs
-    editorDim.addEventListener('click', closePrefs);
-
-    // Footer gear button — opens prefs
-    footerPrefsBtn.addEventListener('click', openPrefs);
-
-    // Launch at login toggle — fires immediately on change
-    toggleLaunch.addEventListener('change', () => {
-      setLaunchAtLogin(toggleLaunch.checked);
     });
 
-    // Auto-update toggle — persisted in localStorage
-    toggleAutoUpdate.addEventListener('change', () => {
-      localStorage.setItem(PREF_AUTO_UPDATE_KEY, String(toggleAutoUpdate.checked));
-    });
+    // ── Paste handler ─────────────────────────────────────────────────────────
+    //
+    // ⌘V / Ctrl+V pastes into the editor even when the textarea doesn't have
+    // focus (e.g. the user summoned Junk and immediately pressed ⌘V without
+    // clicking). We intercept the paste event at the document level and
+    // manually insert the text at the current cursor position.
 
-    // Check for updates button
-    checkUpdateBtn.addEventListener('click', checkForUpdate);
-
-    // ── Paste anywhere ──────────────────────────────────────────────────────
-
-    /**
-     * "Paste anywhere" handler — if the user pastes (Cmd+V / Ctrl+V) while
-     * focus is NOT on the textarea, redirect the paste into the textarea.
-     *
-     * Use case: the user dismisses the window, copies something from another
-     * app, summons Junk again, and immediately pastes — possibly before they
-     * click into the textarea. This handler makes that workflow seamless.
-     *
-     * We intercept at the document level and only act if the textarea is not
-     * already focused (to avoid double-paste).
-     */
     document.addEventListener('paste', (e) => {
-      if (document.activeElement === editor) {
-        // Textarea already focused — let the default paste behaviour handle it
-        return;
-      }
-
-      // Don't redirect paste if prefs are open (user might be pasting a URL check
-      // etc., though the prefs panel has no text inputs currently)
+      // If the editor already has focus, the textarea handles paste natively.
+      if (document.activeElement === editor) return;
+      // If the prefs panel is open, don't intercept paste.
       if (prefsOpen) return;
 
-      // Read text from the clipboard event's DataTransfer object.
-      // This is synchronous and works without the Clipboard API permission.
-      const text = e.clipboardData?.getData('text/plain');
-      if (!text) return;
-
       e.preventDefault();
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (!text) return;
 
       // Insert at the current cursor position (or end if no selection)
       const start = editor.selectionStart ?? editor.value.length;
       const end   = editor.selectionEnd   ?? editor.value.length;
       editor.value =
         editor.value.slice(0, start) + text + editor.value.slice(end);
-
       // Move cursor to after the pasted text
       const newPos = start + text.length;
       editor.setSelectionRange(newPos, newPos);
-
-      // Trigger save
       scheduleSave();
-
-      // Focus the textarea so subsequent typing goes there
-      editor.focus();
     });
 
-    // ── Tauri event listeners ────────────────────────────────────────────────
+    // ── Event wiring ──────────────────────────────────────────────────────────
 
-    /**
-     * Listen for Tauri events.
-     *
-     * 'tauri://focus'  — fires every time the window is brought to foreground.
-     *                    Re-triggers fly-in animation and refocuses the editor.
-     *
-     * 'open-prefs'     — emitted by Rust when the ⌘, global shortcut fires
-     *                    (register_prefs_shortcut in main.rs) or when the
-     *                    open_prefs IPC command is called. Opens the prefs panel.
-     *
-     * Note: `window.__TAURI__?.event?.listen` may be undefined when running
-     * in a regular browser for local development. The optional chaining
-     * gracefully skips the registration in that case.
-     */
-    if (window.__TAURI__?.event?.listen) {
-      // Window shown / focused
-      window.__TAURI__.event.listen('tauri://focus', () => {
-        triggerFlyIn();
-        // Force the WebView document to claim OS keyboard focus before we
-        // focus the textarea. Without this, on macOS the WKWebView can be
-        // "shown" by Rust but the keydown events may still route to the
-        // previously focused app for the first few milliseconds.
-        window.focus();
-        focusEditor();
-      });
-
-      // Open prefs — emitted from Rust's ⌘, shortcut or open_prefs IPC command
-      window.__TAURI__.event.listen('open-prefs', () => {
-        openPrefs();
-      });
-    } else {
-      // Development fallback: auto-focus when page loads in a regular browser
-      focusEditor();
-    }
-
-    // ── Auto-update on startup ───────────────────────────────────────────────
-
-    /**
-     * If "auto-check for updates" is enabled in prefs, check on startup.
-     *
-     * We delay slightly so the window animation finishes before any network
-     * activity that might briefly stall the UI thread.
-     */
-    async function maybeAutoCheckUpdate() {
-      const autoUpdate = localStorage.getItem(PREF_AUTO_UPDATE_KEY);
-      // Default ON if not yet set
-      const shouldCheck = (autoUpdate === null) ? true : (autoUpdate === 'true');
-      if (!shouldCheck) return;
-
-      // Wait for window to fully show before checking
-      await new Promise(r => setTimeout(r, 2000));
-
-      const invokeFn = window.__TAURI__?.core?.invoke;
-      if (typeof invokeFn !== 'function') return;
-
-      try {
-        // v2.5.0: Rust handles the HTTP fetch — returns UpdateResult
-        const result = await invokeFn('check_for_update');
-
-        if (!result.up_to_date) {
-          // A newer version exists — draw attention to the prefs button
-          console.info(`[Junk] Update available: v${result.latest} (current: v${result.current})`);
-          footerPrefsBtn.title = `Update available: v${result.latest} — click to open Preferences`;
-          footerPrefsBtn.style.color = '#5b5bf6';
-          footerPrefsBtn.style.opacity = '0.9';
-        }
-      } catch {
-        // Silent failure on auto-check — don't alarm the user
-      }
-    }
-
-    /**
-     * Listen for the 'update-result' event emitted by the Rust tray menu
-     * "Check for Updates" item. When the user clicks it from the tray,
-     * Rust runs check_for_update() and emits the result here so we can
-     * show it in the prefs panel without the user having to open prefs first.
-     *
-     * This is only wired up when running inside Tauri (window.__TAURI__ exists).
-     */
-    (function registerTrayUpdateListener() {
-      const listen = window.__TAURI__?.event?.listen;
-      if (typeof listen !== 'function') return;
-
-      listen('update-result', (event) => {
-        // event.payload is the serialised UpdateResult
-        const result = event.payload;
-        if (!result) return;
-
-        // Render into the update status area (opens prefs if closed)
-        renderUpdateResult(result);
-
-        // Also highlight the prefs button if an update is available
-        if (!result.up_to_date) {
-          footerPrefsBtn.title = `Update available: v${result.latest} — click to open Preferences`;
-          footerPrefsBtn.style.color = '#5b5bf6';
-          footerPrefsBtn.style.opacity = '0.9';
-        }
-      });
-    })();
-
-    // ── Textarea input handler ──────────────────────────────────────────────
+    // Textarea: save on input with debounce
     editor.addEventListener('input', scheduleSave);
 
-    // ── Window drag (v2.7.0) ──────────────────────────────────────────────────
+    // Footer gear button: open/close prefs
+    footerPrefsBtn.addEventListener('click', () => {
+      if (prefsOpen) closePrefs(); else openPrefs();
+    });
 
-    /**
-     * Native window drag via Tauri's startDragging() IPC.
-     *
-     * WHY NOT -webkit-app-region: drag?
-     *   On macOS with decorations:false + transparent:true, WKWebView intercepts
-     *   the pointer event before the OS window manager sees it. The CSS hint is
-     *   silently ignored — the drag never starts. This is a known macOS/WKWebView
-     *   limitation that affects all transparent frameless Tauri windows.
-     *
-     * HOW THIS WORKS:
-     *   On mousedown anywhere on .window we check whether the click landed on
-     *   an interactive element. If not, we call Tauri's start_dragging command
-     *   which invokes the native NSWindow drag API directly — zero WebView
-     *   involvement, buttery smooth on all platforms.
-     *
-     * DRAG ZONES (anywhere that is NOT):
-     *   textarea  — typing / cursor placement
-     *   input     — pref toggles / text inputs
-     *   button    — clickable controls (prefs ⚙, close, check-update…)
-     *   select    — dropdowns
-     *   a         — links inside the prefs panel
-     *   label     — toggle labels
-     *   .prefs-panel — the whole settings sheet and all its children
-     *   .editor-dim  — the dim overlay (clicking it closes prefs)
-     */
-    (function registerDragListener() {
-      const INTERACTIVE = [
-        'textarea', 'input', 'button', 'select', 'a', 'label',
-        '[contenteditable]', '.prefs-panel', '.editor-dim',
-      ].join(', ');
+    // Dim overlay: close prefs when user clicks outside the panel
+    editorDim.addEventListener('click', closePrefs);
 
-      const windowEl = document.querySelector('.window');
-      if (!windowEl) return;
+    // Prefs close button (×)
+    prefsCloseBtn.addEventListener('click', closePrefs);
 
-      windowEl.addEventListener('mousedown', (e) => {
-        // Primary button only — right-click opens context menus, not drag.
-        if (e.button !== 0) return;
+    // Launch at login toggle
+    toggleLaunch.addEventListener('change', onLaunchAtLoginChange);
 
-        // Walk from the click target up to .window.
-        // If any node along the way matches an interactive selector, bail out
-        // and let the normal click/focus/select behaviour through.
-        let node = e.target;
-        while (node && node !== windowEl) {
-          if (node.matches && node.matches(INTERACTIVE)) return;
-          node = node.parentElement;
-        }
+    // Auto-update toggle — just persists to localStorage
+    toggleAutoUpdate.addEventListener('change', () => {
+      localStorage.setItem(PREF_AUTO_UPDATE_KEY, String(toggleAutoUpdate.checked));
+    });
 
-        // Non-interactive surface hit — initiate a native OS window drag.
-        // We resolve invoke lazily (not at module load) to avoid the
-        // Tauri injection race condition that broke hide_window in v2.2.0.
-        const invokeFn = window.__TAURI__?.core?.invoke;
-        if (typeof invokeFn === 'function') {
-          // Correct Tauri v2 plugin command: 'plugin:window|start_dragging'
-          // with the window label. invoke('start_dragging') silently fails.
-          invokeFn('plugin:window|start_dragging', { label: 'main' }).catch(() => {
-            // Silent failure — worst case the window just doesn't move.
-          });
-        }
-      });
+    // "Check now" button
+    checkUpdateBtn.addEventListener('click', () => {
+      checkForUpdate({ silent: false });
+    });
 
-      // Show a grab cursor whenever the mouse is over a draggable zone,
-      // so the affordance is clear without any visible handle.
-      windowEl.addEventListener('mousemove', (e) => {
-        let node = e.target;
-        while (node && node !== windowEl) {
-          if (node.matches && node.matches(INTERACTIVE)) {
-            windowEl.style.cursor = '';
-            return;
-          }
-          node = node.parentElement;
-        }
-        windowEl.style.cursor = 'grab';
-      });
+    // ── Startup sequence ──────────────────────────────────────────────────────
+    //
+    // Order matters:
+    //   1. Load content — so the textarea has text before we focus it
+    //   2. Wire up Tauri events — so focus/prefs events work immediately
+    //   3. Auto-update check — deferred 2 s, non-blocking
 
-      windowEl.addEventListener('mouseleave', () => {
-        windowEl.style.cursor = '';
-      });
-    })();
-
-
-    // ── Startup ─────────────────────────────────────────────────────────────
-
-    /**
-     * Initialise the app:
-     *   1. Load persisted content into the textarea
-     *   2. Focus the textarea (cursor at end)
-     *   3. Auto-check for updates in the background (if enabled)
-     *
-     * We do NOT trigger the fly-in here because the window starts hidden
-     * (visible: false in tauri.conf.json) — the animation will fire when the
-     * user first presses ⌘J and the 'tauri://focus' event arrives.
-     */
     loadContent();
-    focusEditor();
-    maybeAutoCheckUpdate();
+    setupTauriEvents();
+    maybeAutoCheckOnStartup();
 
-    console.info('[Junk] v2.7.1 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
+    // Log confirmation that the JS module loaded cleanly
+    console.log('[junk] v2.8.0 JS loaded. IPC bridge:', getInvoke() ? 'available' : 'NOT FOUND');
   </script>
 </body>
 </html>

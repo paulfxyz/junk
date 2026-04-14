@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Junk — a global-hotkey scratchpad built with Tauri v2
 //
-// Architecture overview (v2.6.0)
+// Architecture overview (v2.8.0)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
@@ -11,20 +11,27 @@
 // │  Escape        → hide_if_visible()      — always dismiss                 │
 // │  ⌘, / Ctrl+,  → show_prefs_in_window() — open preferences panel         │
 // │                                                                          │
-// │  Window dragging (v2.6.0)                                                │
-// │    The entire window surface is a drag region (-webkit-app-region:drag)  │
-// │    Interactive elements (textarea, buttons, links) override with         │
-// │    no-drag so clicks still register normally. This means you can drag    │
-// │    Junk from the header, the empty margins, or anywhere that isn't       │
-// │    the text editing area — natural and zero-JS.                          │
+// │  Window dragging (v2.8.0)                                                │
+// │    JS mousedown listener calls invoke('start_dragging') which hits the   │
+// │    Rust command below. Rust calls window.start_dragging() — a direct     │
+// │    NSWindow drag API call that bypasses the WebView entirely.            │
+// │                                                                          │
+// │    Why a custom Rust command instead of plugin:window|start_dragging?    │
+// │    Both ultimately call the same OS API, but routing through our own     │
+// │    #[tauri::command] avoids ambiguity in the plugin namespace and gives  │
+// │    us a stable call site we fully control.                               │
+// │                                                                          │
+// │    withGlobalTauri: true (v2.8.0) ensures window.__TAURI__.core.invoke  │
+// │    is always populated so all JS IPC calls succeed reliably.             │
 // │                                                                          │
 // │  Window lifecycle                                                        │
 // │    close button (×) → hide()   — process stays alive, shortcut works    │
-// │    ⌘Q              → exit(0)  — quit for real (v2.6.0 behaviour)        │
+// │    ⌘Q              → exit(0)  — quit for real                           │
 // │    Esc              → hide()   — via OS shortcut                         │
 // │                                                                          │
 // │  IPC commands (called from JS in the prefs panel / update checker)       │
 // │    hide_window()             → hides the main window                     │
+// │    start_dragging()          → initiates native OS window drag           │
 // │    open_prefs()              → emits 'open-prefs' event to JS            │
 // │    get_prefs()               → returns { launch_at_login }               │
 // │    set_launch_at_login(bool) → enables/disables OS login item            │
@@ -84,6 +91,37 @@ fn hide_window(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or("main window not found")?;
     window.hide().map_err(|e| e.to_string())
+}
+
+/// Initiate a native OS window drag.
+///
+/// This is the CORRECT way to drag a frameless transparent Tauri window on macOS.
+///
+/// Background:
+///   - `-webkit-app-region: drag` CSS is silently ignored by WKWebView when
+///     the window has `decorations: false` + `transparent: true`. The hint
+///     reaches the WebView compositor layer but is never forwarded to the OS
+///     window manager.
+///   - `invoke('plugin:window|start_dragging')` routes through the Tauri
+///     plugin system but adding withGlobalTauri only fixes invoke availability,
+///     not the timing issue described below.
+///   - The fundamental constraint: `startDragging` must be called while the
+///     OS still has the mousedown event in an "active drag candidate" state.
+///     JS invoke() is async (microtask queue) — by the time the Promise
+///     resolves the OS has already timed out the drag window.
+///
+/// Solution:
+///   We expose `start_dragging` as a direct #[tauri::command]. When JS calls
+///   invoke('start_dragging') we call window.start_dragging() from Rust, which
+///   calls the native NSWindow `-performWindowDragWithEvent:` API directly.
+///   Tauri's IPC bridge is synchronous on the Rust side — the native call
+///   happens in the same event loop tick that the JS mousedown fires.
+///
+/// The JS side must call e.preventDefault() before the invoke() so the
+/// WebView doesn't process the mousedown itself (which would interfere).
+#[tauri::command]
+fn start_dragging(window: WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
 }
 
 /// Open the preferences panel in the frontend.
@@ -399,6 +437,7 @@ fn main() {
         // ── IPC commands ──────────────────────────────────────────────────────
         .invoke_handler(tauri::generate_handler![
             hide_window,
+            start_dragging,
             open_prefs,
             get_prefs,
             set_launch_at_login,

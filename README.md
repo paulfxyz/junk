@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.7.1-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.8.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -78,7 +78,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.7.1_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.8.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -96,7 +96,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_2.7.1_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.8.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -107,7 +107,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_2.7.1_x64_en-US.msi /quiet
+msiexec /i Junk_2.8.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -115,9 +115,9 @@ msiexec /i Junk_2.7.1_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.7.1_amd64.AppImage
-chmod +x Junk_2.7.1_amd64.AppImage
-./Junk_2.7.1_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.8.0_amd64.AppImage
+chmod +x Junk_2.8.0_amd64.AppImage
+./Junk_2.8.0_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -129,8 +129,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.7.1_amd64.deb
-sudo dpkg -i Junk_2.7.1_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.8.0_amd64.deb
+sudo dpkg -i Junk_2.8.0_amd64.deb
 junk
 ```
 
@@ -653,9 +653,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_2.7.1_universal.dmg` |
-| Windows | `Junk_2.7.1_x64-setup.exe` + `Junk_2.7.1_x64_en-US.msi` |
-| Ubuntu | `Junk_2.7.1_amd64.AppImage` + `Junk_2.7.1_amd64.deb` |
+| macOS | `Junk_2.8.0_universal.dmg` |
+| Windows | `Junk_2.8.0_x64-setup.exe` + `Junk_2.8.0_x64_en-US.msi` |
+| Ubuntu | `Junk_2.8.0_amd64.AppImage` + `Junk_2.8.0_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with changelog.
 
@@ -713,6 +713,12 @@ It sits at the intersection of technical precision and warmth. At 22 px with 1.8
 ---
 
 ## Changelog
+
+### v2.8.0 — 2026-04-14
+- **Fix:** Added `withGlobalTauri: true` to `tauri.conf.json` — this was missing, causing `window.__TAURI__?.core?.invoke` to be `undefined` on all IPC calls (drag, prefs, update check, launch at login all silently failed).
+- **Fix:** Added dedicated `start_dragging` Rust IPC command — calls `window.start_dragging()` directly. JS now calls `e.preventDefault()` before the async invoke, keeping the OS drag candidate state open long enough for the native NSWindow drag API to activate.
+- **Fix:** Rewritten JS IPC layer — uses `window.__TAURI_INTERNALS__.invoke` as primary (always available) with `window.__TAURI__.core.invoke` as fallback. All prefs panel functions (version display, update check, launch at login, auto-update) now work correctly.
+- **Fix:** Prefs panel event listeners rewired — `open-prefs` Tauri event now correctly opens the panel; version number loads on every prefs open.
 
 ### v2.7.1 — 2026-04-14
 - **Fix:** Correct Tauri IPC command for window drag — `invoke('plugin:window|start_dragging', { label: 'main' })`. The v2.7.0 call (`invoke('start_dragging')`) was silently ignored; the correct path includes the plugin namespace.
