@@ -3,7 +3,7 @@
 
   "identifier": "default",
 
-  "description": "Default capability set for Junk v2.3.0. Adds autostart and event permissions for preferences panel on top of the existing window/shortcut capabilities.",
+  "description": "Default capability set for Junk v2.5.0. Adds tray icon, HTTP fetch, autostart and event permissions on top of the existing window/shortcut capabilities.",
 
   "local": true,
 
@@ -34,6 +34,10 @@
 
     "autostart:allow-disable",
 
-    "autostart:allow-is-enabled"
+    "autostart:allow-is-enabled",
+
+    "tray-icon:default",
+
+    "http:default"
   ]
 }

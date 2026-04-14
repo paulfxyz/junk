@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.4.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-2.5.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -81,7 +81,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.3.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.5.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -99,7 +99,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_2.3.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_2.5.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    **Why SmartScreen?** The binary is not code-signed with a Windows Extended Validation (EV) certificate ($200–500/yr). SmartScreen flags all unsigned binaries. The source code is fully public — if you prefer, build it yourself (instructions below).
@@ -107,10 +107,10 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 3. Junk launches on login and disappears into the background.
 4. Press **Ctrl+J** from any application.
 
-Alternatively, download the **MSI** (`Junk_2.3.0_x64_en-US.msi`) for enterprise/silent deployment:
+Alternatively, download the **MSI** (`Junk_2.5.0_x64_en-US.msi`) for enterprise/silent deployment:
 
 ```
-msiexec /i Junk_2.3.0_x64_en-US.msi /quiet
+msiexec /i Junk_2.5.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -119,13 +119,13 @@ msiexec /i Junk_2.3.0_x64_en-US.msi /quiet
 
 ```sh
 # Download
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.3.0_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.5.0_amd64.AppImage
 
 # Make executable
-chmod +x Junk_2.3.0_amd64.AppImage
+chmod +x Junk_2.5.0_amd64.AppImage
 
 # Run
-./Junk_2.3.0_amd64.AppImage
+./Junk_2.5.0_amd64.AppImage
 ```
 
 AppImages are portable — they run on any modern x86_64 Linux distribution without installation. No sudo required.
@@ -138,8 +138,8 @@ AppImages are portable — they run on any modern x86_64 Linux distribution with
 
 ```sh
 # Download and install
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.3.0_amd64.deb
-sudo dpkg -i Junk_2.3.0_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.5.0_amd64.deb
+sudo dpkg -i Junk_2.5.0_amd64.deb
 
 # Run
 junk
@@ -857,18 +857,18 @@ Tag pushed (e.g. v2.3.0)
         │                    rustup target add aarch64-apple-darwin x86_64-apple-darwin
         │                    npm run tauri build -- --target universal-apple-darwin
         │                    codesign -s - (ad-hoc signing)
-        │                    → Junk_2.3.0_universal.dmg
+        │                    → Junk_2.5.0_universal.dmg
         │
         ├─ [Windows runner]  npm ci
         │                    npm run tauri build
-        │                    → Junk_2.3.0_x64-setup.exe
-        │                    → Junk_2.3.0_x64_en-US.msi
+        │                    → Junk_2.5.0_x64-setup.exe
+        │                    → Junk_2.5.0_x64_en-US.msi
         │
         └─ [Ubuntu runner]   npm ci
                              apt-get install libwebkit2gtk-4.1-dev ...
                              npm run tauri build
-                             → Junk_2.3.0_amd64.AppImage
-                             → Junk_2.3.0_amd64.deb
+                             → Junk_2.5.0_amd64.AppImage
+                             → Junk_2.5.0_amd64.deb
                                       │
                                       ▼
                              All artifacts uploaded to GitHub Release
@@ -1027,6 +1027,15 @@ A: No. One window, one scratchpad. This is a design constraint, not a technical 
 ---
 
 ## Changelog
+
+### v2.5.0 — 2026-04-14
+- **Feature:** System tray / menu bar icon — Junk now lives in the macOS menu bar (Windows/Linux: system tray). The tray icon is always visible, even when the window is hidden. Left-click toggles the window. Menu: `Show/Hide Junk` · `Preferences` · `Check for Updates…` · `Quit Junk`
+- **Feature:** True background process — `Quit Junk` in the tray menu is now the **only** way to exit. `⌘Q` and the close button both hide the window. The process is always running, global shortcuts always respond
+- **Fix:** Update checker — moved the GitHub API fetch from JS (`window.fetch()`) to Rust (`tauri-plugin-http` / reqwest). The old JS fetch was blocked by the WebView's Content Security Policy. Rust bypasses CSP entirely and sets the required `User-Agent` header for the GitHub API
+- **Architecture:** `UpdateResult` struct — `check_for_update()` now returns `{ up_to_date: bool, current: String, latest: String, url: String }`. The `url` is the releases page (deep-linked to the latest release when an update is available)
+- **Architecture:** Tray emits `update-result` event to the WebView when the user clicks "Check for Updates" from the tray menu — JS listener opens the Preferences panel and renders the result inline
+- **Architecture:** Added `tauri-plugin-tray` and `tauri-plugin-http` (with `rustls-tls` feature) to Cargo.toml
+- **Architecture:** Capabilities updated — `tray-icon:default` and `http:default` permissions added to `capabilities/default.json`
 
 ### v2.4.0 — 2026-04-14
 - **Fix:** Removed `alwaysOnTop: true` — other apps' modals, alerts, and dialogs can now appear above Junk as expected

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v2.4.0)
+  Junk — frontend (v2.5.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Architecture: single HTML file, zero build step, zero npm dependencies.
@@ -1002,10 +1002,11 @@
         const prefs = await invokeFn('get_prefs');
         toggleLaunch.checked = prefs.launch_at_login ?? false;
 
-        // Also fetch the current version for the credits label
+        // Also fetch the current version for the credits label.
+        // check_for_update() now returns UpdateResult: { up_to_date, current, latest, url }
         const updateInfo = await invokeFn('check_for_update');
-        if (updateInfo?.current_version) {
-          currentVersionEl.textContent = 'v' + updateInfo.current_version;
+        if (updateInfo?.current) {
+          currentVersionEl.textContent = 'v' + updateInfo.current;
         }
       } catch (err) {
         console.warn('get_prefs IPC failed:', err);
@@ -1034,11 +1035,15 @@
     /**
      * Check GitHub releases API for a newer version.
      *
-     * We let JS do the fetch (not Rust) because:
-     *   - check_for_update IPC returns current_version + the releases URL
-     *   - window.fetch() to api.github.com works from the WebView with no extra
-     *     capability config (Tauri v2 allows outbound fetch by default)
-     *   - Simpler than adding reqwest/ureq to Cargo.toml
+     * v2.5.0: The HTTP fetch is now done entirely on the Rust side via
+     * tauri-plugin-http (reqwest). This avoids CSP issues where WebView
+     * was blocking window.fetch() calls to api.github.com.
+     *
+     * check_for_update() returns UpdateResult:
+     *   { up_to_date: bool, current: string, latest: string, url: string }
+     *
+     * The `url` field is the releases page when an update is available,
+     * or the releases page anyway (for "you're up to date" info).
      */
     async function checkForUpdate() {
       checkUpdateBtn.disabled = true;
@@ -1047,48 +1052,45 @@
 
       const invokeFn = window.__TAURI__?.core?.invoke;
 
-      let currentVersion = null;
-      let releasesUrl = 'https://api.github.com/repos/paulfxyz/junk/releases/latest';
-      let releasesPage = 'https://github.com/paulfxyz/junk/releases';
-
-      if (typeof invokeFn === 'function') {
-        try {
-          const info = await invokeFn('check_for_update');
-          currentVersion = info.current_version;
-          releasesUrl = info.releases_url ?? releasesUrl;
-          releasesPage = info.releases_page ?? releasesPage;
-        } catch (err) {
-          console.warn('check_for_update IPC failed:', err);
-        }
+      if (typeof invokeFn !== 'function') {
+        // Dev browser fallback — no Tauri IPC available
+        updateStatus.textContent = 'Not running in Tauri';
+        updateStatus.className = 'update-error';
+        checkUpdateBtn.disabled = false;
+        return;
       }
 
       try {
-        const res  = await fetch(releasesUrl, {
-          headers: { 'Accept': 'application/vnd.github+json' }
-        });
-        const data = await res.json();
-
-        // GitHub tag is "v2.3.0" — strip the leading "v" for comparison
-        const latest = (data.tag_name ?? '').replace(/^v/, '');
-
-        if (!currentVersion || !latest) {
-          throw new Error('Could not parse version strings');
-        }
-
-        if (latest === currentVersion) {
-          updateStatus.textContent = `You're up to date (${latest})`;
-          updateStatus.className = 'up-to-date';
-        } else {
-          updateStatus.innerHTML = `Update available: <a href="${releasesPage}" target="_blank">v${latest}</a>`;
-          updateStatus.className = 'update-available';
-        }
+        // Rust does the fetch; returns { up_to_date, current, latest, url }
+        const result = await invokeFn('check_for_update');
+        renderUpdateResult(result);
       } catch (err) {
-        console.warn('Update check failed:', err);
+        console.warn('check_for_update IPC failed:', err);
         updateStatus.textContent = 'Could not check — are you online?';
         updateStatus.className = 'update-error';
       } finally {
         checkUpdateBtn.disabled = false;
       }
+    }
+
+    /**
+     * Render an UpdateResult object into the UI.
+     * Called both from the manual "Check for Updates" button AND from
+     * the tray menu "Check for Updates" event listener.
+     *
+     * @param {{ up_to_date: boolean, current: string, latest: string, url: string }} result
+     */
+    function renderUpdateResult(result) {
+      if (result.up_to_date) {
+        updateStatus.textContent = `You're up to date (v${result.current})`;
+        updateStatus.className = 'up-to-date';
+      } else {
+        updateStatus.innerHTML =
+          `Update available: <a href="${result.url}" target="_blank">v${result.latest}</a>`;
+        updateStatus.className = 'update-available';
+      }
+      // Ensure the prefs panel is open so the user sees the result
+      if (!prefsOpen) openPrefs();
     }
 
     // ── Keyboard handlers ───────────────────────────────────────────────────
@@ -1272,22 +1274,13 @@
       if (typeof invokeFn !== 'function') return;
 
       try {
-        const info = await invokeFn('check_for_update');
-        const currentVersion = info.current_version;
-        const releasesUrl = info.releases_url ?? 'https://api.github.com/repos/paulfxyz/junk/releases/latest';
-        const releasesPage = info.releases_page ?? 'https://github.com/paulfxyz/junk/releases';
+        // v2.5.0: Rust handles the HTTP fetch — returns UpdateResult
+        const result = await invokeFn('check_for_update');
 
-        const res  = await fetch(releasesUrl, {
-          headers: { 'Accept': 'application/vnd.github+json' }
-        });
-        const data = await res.json();
-        const latest = (data.tag_name ?? '').replace(/^v/, '');
-
-        if (latest && currentVersion && latest !== currentVersion) {
-          // A newer version exists — log it (the user will see it in prefs)
-          console.info(`[Junk] Update available: v${latest} (current: v${currentVersion})`);
-          // Mark the prefs button to draw attention
-          footerPrefsBtn.title = `Update available: v${latest} — click to open Preferences`;
+        if (!result.up_to_date) {
+          // A newer version exists — draw attention to the prefs button
+          console.info(`[Junk] Update available: v${result.latest} (current: v${result.current})`);
+          footerPrefsBtn.title = `Update available: v${result.latest} — click to open Preferences`;
           footerPrefsBtn.style.color = '#5b5bf6';
           footerPrefsBtn.style.opacity = '0.9';
         }
@@ -1295,6 +1288,35 @@
         // Silent failure on auto-check — don't alarm the user
       }
     }
+
+    /**
+     * Listen for the 'update-result' event emitted by the Rust tray menu
+     * "Check for Updates" item. When the user clicks it from the tray,
+     * Rust runs check_for_update() and emits the result here so we can
+     * show it in the prefs panel without the user having to open prefs first.
+     *
+     * This is only wired up when running inside Tauri (window.__TAURI__ exists).
+     */
+    (function registerTrayUpdateListener() {
+      const listen = window.__TAURI__?.event?.listen;
+      if (typeof listen !== 'function') return;
+
+      listen('update-result', (event) => {
+        // event.payload is the serialised UpdateResult
+        const result = event.payload;
+        if (!result) return;
+
+        // Render into the update status area (opens prefs if closed)
+        renderUpdateResult(result);
+
+        // Also highlight the prefs button if an update is available
+        if (!result.up_to_date) {
+          footerPrefsBtn.title = `Update available: v${result.latest} — click to open Preferences`;
+          footerPrefsBtn.style.color = '#5b5bf6';
+          footerPrefsBtn.style.opacity = '0.9';
+        }
+      });
+    })();
 
     // ── Textarea input handler ──────────────────────────────────────────────
     editor.addEventListener('input', scheduleSave);
@@ -1315,7 +1337,7 @@
     focusEditor();
     maybeAutoCheckUpdate();
 
-    console.info('[Junk] v2.4.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
+    console.info('[Junk] v2.5.0 frontend initialised. Press ⌘J to toggle, ⌘, for preferences.');
   </script>
 </body>
 </html>

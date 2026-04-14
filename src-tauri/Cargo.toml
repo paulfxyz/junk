@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "2.4.0"
+version = "2.5.0"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -35,6 +35,18 @@ tauri-plugin-global-shortcut = "2"
 # On Windows: writes/removes the HKCU\...\Run registry key.
 # On Linux: creates/removes ~/.config/autostart/<app>.desktop.
 tauri-plugin-autostart = "2"
+
+# System tray / menu bar icon plugin.
+# Provides a persistent icon in the macOS menu bar / Windows system tray /
+# Linux status area. Users can Show/Hide Junk, open Preferences, check for
+# updates, and Quit from here — even when the main window is hidden.
+tauri-plugin-tray = "2"
+
+# HTTP client plugin — allows Rust code to make outbound HTTP requests.
+# Used for the update checker: fetches api.github.com/repos/paulfxyz/junk/releases/latest
+# from Rust rather than from the WebView's fetch(), which can be blocked by
+# the WebView's Content Security Policy in some environments.
+tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
 
 # Serialisation — required for passing data across the Tauri IPC bridge.
 # Every type that crosses invoke() / emit() must implement Serialize/Deserialize.

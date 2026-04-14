@@ -298,45 +298,58 @@ jobs:
       - name: List release files
         run: find dist/ -type f | sort
 
-      # Create the GitHub Release and attach every file in dist/
-      # The release name and body are derived from the tag name.
-      # `gh release create` (GitHub CLI, pre-installed on ubuntu-latest) is
-      # simpler and more reliable than the softprops/action-gh-release action.
-      - name: Create GitHub Release
+      # Upload artifacts to the GitHub Release.
+      #
+      # Strategy: we pre-create the release (with full release notes) when we
+      # push the tag from the dev machine, BEFORE CI runs. CI then just uploads
+      # the built artifacts to the existing release.
+      #
+      # Why `gh release upload` instead of `gh release create`?
+      #   - `gh release create` fails if the release already exists (exit 1),
+      #     which caused CI to fail even though all builds succeeded.
+      #   - `gh release upload` is idempotent: it adds files to an existing
+      #     release. If the release doesn't exist yet, we create it first.
+      #
+      # Stale artifact filter: the GitHub Actions artifact cache can contain
+      # leftover files from old Cargo.lock runs (e.g. Junk_1.6.0_*). We filter
+      # them out by only uploading files whose name contains the current tag.
+      - name: Upload artifacts to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          echo "Creating release for tag: $TAG"
+          # Strip the leading 'v' to get the bare version number (e.g. 2.5.0)
+          VERSION="${TAG#v}"
+          echo "Uploading artifacts for tag: $TAG  version: $VERSION"
 
-          # Generate a simple changelog from git log since the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --oneline "$PREV_TAG..$TAG" | head -20)
-          else
-            CHANGELOG="Initial release"
+          # Only upload files that contain the current version string.
+          # This filters out stale artifacts from previous Cargo cache entries.
+          RELEASE_FILES=$(find dist/ -type f | grep "$VERSION" | sort | tr '\n' ' ')
+          echo "Filtered release files: $RELEASE_FILES"
+
+          if [ -z "$RELEASE_FILES" ]; then
+            echo "ERROR: No release files found matching version $VERSION"
+            exit 1
           fi
 
-          # Create the release with all files in dist/
-          # Collect all files from dist/ into a flat list
-          RELEASE_FILES=$(find dist/ -type f | sort | tr '\n' ' ')
-          echo "Release files: $RELEASE_FILES"
+          # Create the release if it doesn't already exist, then upload.
+          # --clobber overwrites any existing asset with the same name.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading artifacts"
+            gh release upload "$TAG" $RELEASE_FILES --clobber
+          else
+            echo "Release $TAG does not exist — creating with artifacts"
+            PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo "")
+            if [ -n "$PREV_TAG" ]; then
+              CHANGELOG=$(git log --oneline "$PREV_TAG..$TAG" | head -20)
+            else
+              CHANGELOG="Initial release"
+            fi
+            gh release create "$TAG" \
+              --title "Junk $TAG" \
+              --notes "$CHANGELOG" \
+              $RELEASE_FILES
+          fi
 
-          gh release create "$TAG" \
-            --title "Junk $TAG" \
-            --notes "## What's new
-
-          $CHANGELOG
-
-          ---
-
-          **Installation:**
-          - **macOS**: Download the \`.dmg\`, open it, drag Junk to Applications.
-            Then run: \`xattr -dr com.apple.quarantine /Applications/Junk.app\`
-          - **Windows**: Download the \`.exe\` (NSIS) or \`.msi\` installer. SmartScreen
-            may warn — click 'More info' → 'Run anyway'.
-          - **Linux (AppImage)**: \`chmod +x Junk_*.AppImage && ./Junk_*.AppImage\`
-          - **Linux (deb)**: \`sudo dpkg -i junk_*.deb\`
-
-          Built with [Tauri v2](https://v2.tauri.app) + Rust." \
-            $RELEASE_FILES
+          echo "Done. Artifacts on release:"
+          gh api /repos/paulfxyz/junk/releases/tags/$TAG --jq '.assets[] | .name'
