@@ -1,6 +1,6 @@
 {
   "name": "junk",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "description": "Global-hotkey scratchpad \u2014 \u2318J/Ctrl+J to summon a floating notepad anywhere.",
   "private": true,
   "scripts": {
