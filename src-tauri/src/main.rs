@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Junk — a global-hotkey scratchpad built with Tauri v2
 //
-// Architecture overview (v3.0.0)
+// Architecture overview (v3.0.1)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
@@ -88,6 +88,14 @@ struct UpdateResult {
 struct WindowPosition {
     x: i32,
     y: i32,
+}
+
+/// Window size returned from `get_window_size()`.
+/// Physical pixel dimensions.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct WindowSize {
+    width: u32,
+    height: u32,
 }
 
 // ── IPC commands ──────────────────────────────────────────────────────────────
@@ -268,6 +276,32 @@ fn set_window_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
     window
         .set_position(tauri::PhysicalPosition::new(x, y))
         .map_err(|e| format!("set_window_position({x},{y}) failed: {e}"))
+}
+
+/// Return the current window size in physical pixels.
+#[tauri::command]
+fn get_window_size(app: AppHandle) -> Result<WindowSize, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    let size = window
+        .outer_size()
+        .map_err(|e| format!("get_window_size failed: {e}"))?;
+    Ok(WindowSize { width: size.width, height: size.height })
+}
+
+/// Resize the window to the given physical pixel dimensions.
+/// Clamps to a safe minimum (300×200) and reasonable maximum (3000×2000).
+#[tauri::command]
+fn set_window_size(app: AppHandle, width: u32, height: u32) -> Result<(), String> {
+    let w = width.clamp(300, 3000);
+    let h = height.clamp(200, 2000);
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    window
+        .set_size(tauri::PhysicalSize::new(w, h))
+        .map_err(|e| format!("set_window_size({w},{h}) failed: {e}"))
 }
 
 /// Re-register the toggle shortcut to a new key combination.
@@ -590,6 +624,8 @@ fn main() {
             check_for_update,
             get_window_position,
             set_window_position,
+            get_window_size,
+            set_window_size,
             set_hotkey,
         ])
         // ── Window event handling ─────────────────────────────────────────────

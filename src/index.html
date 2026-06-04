@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.0.0)
+  Junk — frontend (v3.0.1)
   ═══════════════════════════════════════════════════════════════════════════════
 
   New in v3.0.0:
@@ -110,10 +110,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     /* ── Body / root — transparent so backdrop-filter shows through ────────── */
-    html, body {
+    /* macOS fix: set border-radius on html/body so the WebView's own clipping  */
+    /* region matches the .window shape — prevents black square corners.        */
+    html {
       width: 100%; height: 100%;
       background: transparent;
       overflow: hidden;
+      border-radius: 14px;  /* must match .window border-radius */
+    }
+    body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      border-radius: 14px;
       font-family: 'Space Grotesk', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
@@ -125,12 +134,16 @@
       background: var(--bg-glass);
       backdrop-filter: blur(40px) saturate(180%);
       -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border: 1px solid var(--border);
+      /* Use outline for the border ring — doesn't affect layout geometry       */
+      /* and avoids the 1px black rectangle that border can create on macOS.   */
+      border: none;
+      outline: 1px solid var(--border);
+      outline-offset: -1px;
       border-radius: 14px;
       box-shadow: var(--shadow);
       overflow: hidden;
       animation: fly-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.2s, outline-color 0.2s;
     }
 
     @keyframes fly-in {
@@ -307,16 +320,21 @@
     }
 
     .prefs-open #prefs-panel {
-      height: 370px;
+      /* Use a generous max-height (90% of window) so all options are visible. */
+      /* The prefs-inner div scrolls if content overflows.                     */
+      height: min(460px, calc(100% - 44px));
     }
 
     .prefs-inner {
       padding: 16px 18px 20px;
       height: 100%;
       overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
       gap: 14px;
+      /* Ensure scrollbar is always reachable */
+      -webkit-overflow-scrolling: touch;
     }
 
     .prefs-inner::-webkit-scrollbar { width: 3px; }
@@ -697,7 +715,7 @@
             &nbsp;·&nbsp;
             To fully quit: Activity Monitor → Junk → quit
           </span>
-          <span id="current-version">v3.0.0</span>
+          <span id="current-version">v3.0.1</span>
         </div>
 
       </div>
@@ -781,6 +799,7 @@
     const KEY_MD_MODE     = 'junk-md-mode';     // 'true' | 'false'
     const KEY_HOTKEY      = 'junk-hotkey';      // e.g. 'KeyJ'
     const KEY_WIN_POS     = 'junk-win-pos';     // JSON {x,y}
+    const KEY_WIN_SIZE    = 'junk-win-size';    // JSON {w,h}
 
     // ── Content persistence ──────────────────────────────────────────────────
     function loadContent() {
@@ -954,24 +973,45 @@
 
     let isDragging = false;
 
-    async function saveWindowPosition() {
+    async function saveWindowGeometry() {
       try {
         const pos = await ipc('get_window_position');
         if (pos) {
           localStorage.setItem(KEY_WIN_POS, JSON.stringify({ x: pos.x, y: pos.y }));
         }
+        // Also save the window's logical size via the outer dimensions
+        const size = await ipc('get_window_size');
+        if (size) {
+          localStorage.setItem(KEY_WIN_SIZE, JSON.stringify({ w: size.width, h: size.height }));
+        }
       } catch (err) {
-        // Non-fatal — position just won't be saved
-        console.warn('[position] get_window_position failed:', err);
+        // Non-fatal — geometry just won't be saved this time
+        console.warn('[position] saveWindowGeometry failed:', err);
       }
     }
 
-    async function restoreWindowPosition() {
-      const raw = localStorage.getItem(KEY_WIN_POS);
-      if (!raw) return;
+    // Keep legacy alias for tauri://focus path
+    const saveWindowPosition = saveWindowGeometry;
+
+    async function restoreWindowGeometry() {
+      // Restore size first, then position (so the window lands in the right spot)
+      const rawSize = localStorage.getItem(KEY_WIN_SIZE);
+      if (rawSize) {
+        try {
+          const { w, h } = JSON.parse(rawSize);
+          if (w >= 300 && h >= 200 && w <= 3000 && h <= 2000) {
+            await ipc('set_window_size', { width: w, height: h });
+          }
+        } catch (err) {
+          console.warn('[position] restoreWindowSize failed:', err);
+        }
+      }
+
+      const rawPos = localStorage.getItem(KEY_WIN_POS);
+      if (!rawPos) return;
 
       try {
-        const { x, y } = JSON.parse(raw);
+        const { x, y } = JSON.parse(rawPos);
 
         // Off-screen guard — skip if way outside current screen bounds
         const sw = window.screen.width  + 200;
@@ -986,6 +1026,8 @@
         console.warn('[position] restoreWindowPosition failed:', err);
       }
     }
+
+    const restoreWindowPosition = restoreWindowGeometry;
 
     // ════════════════════════════════════════════════════════════════════════
     // FEATURE 3: Font size preference
@@ -1264,12 +1306,30 @@
 
       try {
         await navigator.clipboard.writeText(text);
-        // Momentary "Copied!" feedback on the button
-        const orig = sourceBtn.textContent;
-        sourceBtn.textContent = 'Copied!';
-        sourceBtn.classList.add('copied');
+
+        // Feedback: preserve original innerHTML (may be SVG icon or text)
+        const origHTML = sourceBtn.innerHTML;
+        const origTitle = sourceBtn.title;
+        const isSvgBtn = sourceBtn.classList.contains('icon-btn');
+
+        if (isSvgBtn) {
+          // For icon buttons: swap SVG for a checkmark icon + show save-status
+          sourceBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+          sourceBtn.title = 'Saved!';
+          // Also flash the save-status label
+          saveStatus.textContent = 'copied';
+          saveStatus.classList.remove('saving');
+          void saveStatus.offsetWidth;
+          saveStatus.classList.add('saving');
+        } else {
+          // For text buttons (prefs export): swap text
+          sourceBtn.textContent = 'Copied!';
+          sourceBtn.classList.add('copied');
+        }
+
         setTimeout(() => {
-          sourceBtn.textContent = orig;
+          sourceBtn.innerHTML = origHTML;
+          sourceBtn.title = origTitle;
           sourceBtn.classList.remove('copied');
         }, 1600);
       } catch (err) {
@@ -1425,6 +1485,13 @@
       windowEl.addEventListener('mouseleave', () => { windowEl.style.cursor = ''; });
     })();
 
+    // Save size whenever the window is resized
+    let resizeSaveTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeSaveTimer);
+      resizeSaveTimer = setTimeout(saveWindowGeometry, 300);
+    });
+
     // ── Keyboard shortcuts ───────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
       // Don't intercept while capturing a new hotkey
@@ -1500,7 +1567,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.0.0 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.0.1 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>
