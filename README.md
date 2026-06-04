@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-2.8.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -70,6 +70,12 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 | **Zero runtime deps** | No Node.js, no Electron, no update daemon, nothing in your background |
 | **Space Grotesk** | 22 px, 1.8 line-height — big, readable, distraction-free |
 | **Paste anywhere** | ⌘V / Ctrl+V works even without clicking the textarea first |
+| **Custom shortcut** | Change ⌘J to any key combo in Preferences — live re-registration, no restart |
+| **Position memory** | Remembers where you dragged it between sessions via `PhysicalPosition` IPC |
+| **Font size** | 14–28 px slider in Preferences — drives CSS custom property, live preview |
+| **Dark mode** | Light / Auto / Dark — Auto follows `prefers-color-scheme` with live listener |
+| **Markdown preview** | ⌘M toggle — inline vanilla-JS parser, no library, zero bundle impact |
+| **Export** | Footer copy button — copies all content to clipboard with "Copied!" feedback |
 
 ---
 
@@ -77,7 +83,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_2.8.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.0.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -95,7 +101,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_2.8.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.0.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -106,7 +112,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_2.8.0_x64_en-US.msi /quiet
+msiexec /i Junk_3.0.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -114,9 +120,9 @@ msiexec /i Junk_2.8.0_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.8.0_amd64.AppImage
-chmod +x Junk_2.8.0_amd64.AppImage
-./Junk_2.8.0_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.0_amd64.AppImage
+chmod +x Junk_3.0.0_amd64.AppImage
+./Junk_3.0.0_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -128,8 +134,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_2.8.0_amd64.deb
-sudo dpkg -i Junk_2.8.0_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.0_amd64.deb
+sudo dpkg -i Junk_3.0.0_amd64.deb
 junk
 ```
 
@@ -142,6 +148,7 @@ junk
 | **⌘J** (macOS) / **Ctrl+J** (Win/Linux) | Toggle the window |
 | **Esc** | Hide the window (or close Preferences if open) |
 | **⌘,** / **Ctrl+,** | Open Preferences panel |
+| **⌘M** / **Ctrl+M** | Toggle Markdown preview |
 | Click + drag (anywhere except textarea) | Move the window |
 | **⌘A** / **Ctrl+A** | Select all text |
 | **⌘V** / **Ctrl+V** | Paste — works without clicking the textarea first |
@@ -174,9 +181,37 @@ When enabled (default: on), Junk silently checks the GitHub Releases API ~2 seco
 
 The "Check now" button triggers an immediate check and shows the result inline:
 
-- **"You're up to date (2.8.0)"** — green
+- **"You're up to date (3.0.0)"** — green
 - **"Update available: v2.x.x"** — purple, clickable link to releases page
 - **"Could not check — are you online?"** — red if the request fails
+
+### Custom shortcut
+
+Click the shortcut field in Preferences and press any key. Junk immediately unregisters the old OS hotkey and registers the new one at runtime — no restart. The new key is stored in `localStorage` and re-applied on next launch.
+
+Keys not available: bare modifier keys (Shift, Ctrl, Meta) and Escape (already reserved). Any letter, digit, F-key, Space, or punctuation key works.
+
+### Font size
+
+A slider from 14 px to 28 px drives a CSS custom property `--font-size` on `:root`. Both the editor textarea and the Markdown preview pick it up automatically — no JS duplication. Saved to `localStorage`.
+
+### Appearance (dark mode)
+
+Three options: **Light**, **Auto**, **Dark**.
+- **Auto** (default): reads `prefers-color-scheme` and listens for live OS changes.
+- **Light** / **Dark**: hard overrides that ignore system preference.
+
+Implemented via CSS custom properties on `:root[data-theme="dark"]`. Every colour, shadow, and blur value has a dark-mode override — the frosted glass deepens to `rgba(30,30,35,0.88)`.
+
+### Markdown preview
+
+Toggle with **⌘M** / **Ctrl+M**, the footer button, or the toggle in Preferences. When on, the textarea hides and a rendered `#md-preview` div appears. Raw text is always stored in `localStorage` — the preview is render-only.
+
+The inline parser handles: h1/h2/h3, **bold**, _italic_, `code`, fenced code blocks, blockquotes, HR, unordered/ordered lists, `[links](url)`. No external library — ~80 lines of vanilla JS.
+
+### Export
+
+Copies all content to the clipboard via `navigator.clipboard.writeText()`. Available from the footer copy button and the Preferences "Copy all text" button.
 
 ### Credits
 
@@ -268,7 +303,7 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
 
 **Local data:** Your text lives on your machine only. Never sent anywhere.
 
-**Code audit:** `src-tauri/src/main.rs` is ~490 lines. The entire frontend is one HTML file (~1,200 lines). MIT-licensed, fully public — [read the source](https://github.com/paulfxyz/junk).
+**Code audit:** `src-tauri/src/main.rs` is ~620 lines. The entire frontend is one HTML file (~1,500 lines). MIT-licensed, fully public — [read the source](https://github.com/paulfxyz/junk).
 
 <details>
 <summary><strong>Tauri capability permissions (minimal surface area)</strong></summary>
@@ -282,6 +317,8 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
     "core:window:allow-set-focus",
     "core:window:allow-is-visible",
     "core:window:allow-start-dragging",
+    "core:window:allow-outer-position",
+    "core:window:allow-set-position",
     "core:webview:allow-set-webview-focus",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
@@ -640,7 +677,7 @@ This was a real bug in early versions — `SUPER | CONTROL` compiled fine but pr
 <details>
 <summary><strong>Single-file frontend</strong> (no build step, no npm runtime)</summary>
 
-`src/index.html` is ~1,200 lines of HTML, CSS, and JavaScript — all inline, zero build step, zero npm runtime dependencies, zero external JS libraries.
+`src/index.html` is ~1,500 lines of HTML, CSS, and JavaScript — all inline, zero build step, zero npm runtime dependencies, zero external JS libraries.
 
 **Why a single file?** Tauri embeds the frontend directory into the binary at compile time. A single file is simpler to audit, impossible to misconfigure, and eliminates the entire category of bundler/module-resolution bugs. There is no webpack.config.js to break, no node_modules directory to corrupt, no import map to misconfigure.
 
@@ -708,11 +745,25 @@ ipc('check_for_update')               →  tauri-plugin-http fetch to GitHub API
                                            latest: String,    ← tag_name from API
                                            url: String        ← release link
                                          }
+
+─── v3.0.0 additions ────────────────────────────────────────────────────────────
+ipc('set_hotkey', { key: String })    →  parse_key_code(key) → Code
+                                         global_shortcut.unregister(old)
+                                         global_shortcut.register(new Code + modifier)
+                                         *state.lock() = new_shortcut
+
+ipc('get_window_position')            →  window.outer_position()
+                                         returns WindowPosition { x: i32, y: i32 }
+
+ipc('set_window_position', {x, y})    →  window.set_position(
+                                           PhysicalPosition::new(x, y)
+                                         )
 ─────────────────────────────────────────────────────────────────────────────
 
 Rust → JS events (via window.emit / Tauri event system)
 ─────────────────────────────────────────────────────────────────────────────
 "tauri://focus"   →  triggerFlyIn() + setTimeout(focusEditor, 20ms)
+                     + restoreWindowPosition()  ← new in v3.0.0
 "open-prefs"      →  openPrefs() — reads OS state fresh on every open
 ```
 
@@ -733,6 +784,102 @@ let body: serde_json::Value = serde_json::from_str(&text)
 ```
 
 This is a hidden gotcha not mentioned in the Tauri documentation.
+
+</details>
+
+<details>
+<summary><strong>v3.0.0 feature internals: runtime hotkey, position memory, dark mode, markdown parser</strong></summary>
+
+### Runtime hotkey re-registration
+
+The challenge: `tauri-plugin-global-shortcut` registers a `Shortcut` value. To change the hotkey, you must unregister the old `Shortcut` first — otherwise both fire. But the `Shortcut` object is consumed by the registration call, so you can't hold a reference after registering.
+
+Solution: `CurrentShortcut(Mutex<Shortcut>)` managed state. The `set_hotkey` command locks the mutex, clones the old shortcut for unregistration, registers the new one, and replaces the mutex value:
+
+```rust
+#[tauri::command]
+fn set_hotkey(
+    app: AppHandle,
+    key: String,
+    state: State<'_, CurrentShortcut>,
+) -> Result<(), String> {
+    let new_code = parse_key_code(&key)?;
+    let modifier = platform_modifier();
+    let new_shortcut = Shortcut::new(Some(modifier), new_code);
+
+    let gs = app.global_shortcut();
+    let mut current = state.0.lock().unwrap();
+
+    // Unregister old — explicit call required, Shortcut does not impl Drop
+    gs.unregister(current.clone()).map_err(|e| e.to_string())?;
+
+    // Register new
+    let toggle_fn = /* same toggle closure as setup */ ...;
+    gs.on_shortcut(new_shortcut.clone(), toggle_fn)
+        .map_err(|e| e.to_string())?;
+
+    *current = new_shortcut;
+    Ok(())
+}
+```
+
+Key detail: `KeyboardEvent.code` (e.g. `"KeyJ"`, `"F2"`, `"Space"`) is used, not `.key` (e.g. `"j"`, `"F2"`, `" "`). `.code` is layout-independent — it represents physical key position, so it works identically on AZERTY, Dvorak, and QWERTY.
+
+### Window position memory
+
+Two IPC commands: `get_window_position` (reads `window.outer_position()` → `PhysicalPosition`) and `set_window_position` (calls `window.set_position(PhysicalPosition::new(x,y))`). Two new capability permissions required: `core:window:allow-outer-position` and `core:window:allow-set-position`.
+
+JS save flow: on every `mouseup` after a drag, wait 80 ms (OS commits the final position asynchronously), call `get_window_position`, store `x`/`y` in `localStorage`. The 80 ms delay is critical — without it, `outer_position()` may return the pre-drag position on macOS.
+
+JS restore flow: on `tauri://focus` event (every time the window appears), call `get_window_position` from localStorage and `set_window_position`. Not on startup — the `tauri://focus` path guarantees the WKWebView is visible and the OS compositor has committed the window frame before we try to move it.
+
+Off-screen guard: `if (x < -100 || y < -100 || x > screen.width + 200 || y > screen.height + 200)` — silently discard. Protects against position memory becoming stale after a monitor is unplugged or a display resolution changes.
+
+### Automatic dark mode with live listener
+
+`window.matchMedia('(prefers-color-scheme: dark)')` provides both the current state and a live change event. The key subtlety is setting up the listener only when `Auto` mode is active, and tearing it down when the user switches to Light or Dark:
+
+```js
+function applyTheme(theme) {
+    // Remove any existing auto-listener
+    if (autoThemeListener) {
+        darkMq.removeEventListener('change', autoThemeListener);
+        autoThemeListener = null;
+    }
+    if (theme === 'auto') {
+        autoThemeListener = (e) => setDarkClass(e.matches);
+        darkMq.addEventListener('change', autoThemeListener);
+        setDarkClass(darkMq.matches);
+    } else {
+        setDarkClass(theme === 'dark');
+    }
+}
+```
+
+CSS dark-mode variables are defined on `:root[data-theme="dark"]` — a single attribute flip applied to `:root` drives the entire visual tree via CSS custom properties. No JS property iteration, no class list management on individual elements.
+
+### Vanilla Markdown parser
+
+No external library. ~80 lines of vanilla JS process line-by-line:
+
+```
+Inline pass (per line):
+  **bold**   → <strong>
+  _italic_   → <em>
+  `code`     → <code>
+  [text](url)→ <a href>
+
+Block pass (per line):
+  ^# → <h1>, ^## → <h2>, ^### → <h3>
+  ^> → <blockquote>
+  ^--- → <hr>
+  ^- / ^* → <ul><li>
+  ^\d+\. → <ol><li>
+  ^``` → fenced code block (buffered until closing ```)
+  else → <p>
+```
+
+Lists accumulate in a buffer and flush when a non-list line is encountered. Fenced code blocks capture everything until the matching ` ``` ` close, then wrap in `<pre><code>`. The result is set as `innerHTML` on a preview `<div>` — the `<textarea>` is hidden, raw text continues to be stored in `localStorage` unchanged.
 
 </details>
 
@@ -893,7 +1040,7 @@ junk/
 │   └── index.html           ← Entire frontend: HTML + CSS + JS, single file, no build step
 ├── src-tauri/
 │   ├── src/
-│   │   └── main.rs          ← ~490 lines, all Rust backend logic, heavily commented
+│   │   └── main.rs          ← ~620 lines, all Rust backend logic, heavily commented
 │   ├── capabilities/
 │   │   └── default.json     ← Tauri permission allowlist (minimal surface area)
 │   ├── Cargo.toml           ← Rust dependencies + build profile (LTO, strip, panic=abort)
@@ -983,9 +1130,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_2.8.0_universal.dmg` |
-| Windows | `Junk_2.8.0_x64-setup.exe` + `Junk_2.8.0_x64_en-US.msi` |
-| Ubuntu | `Junk_2.8.0_amd64.AppImage` + `Junk_2.8.0_amd64.deb` |
+| macOS | `Junk_3.0.0_universal.dmg` |
+| Windows | `Junk_3.0.0_x64-setup.exe` + `Junk_3.0.0_x64_en-US.msi` |
+| Ubuntu | `Junk_3.0.0_amd64.AppImage` + `Junk_3.0.0_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with a git log changelog.
 
@@ -1008,6 +1155,9 @@ The release job only runs on `v*` tag pushes — not on branch pushes or PRs. It
 | All IPC silently fails — no errors | `withGlobalTauri` not set, `window.__TAURI__` is `undefined` | Add `"withGlobalTauri": true` to `tauri.conf.json` app section |
 | Window drag appears to work (grab cursor) but moves nothing | Three separate issues: CSS ignored, wrong invoke path, async timing | Use `e.preventDefault()` + custom Rust `start_dragging` command |
 | `tauri-plugin-tray = "2"` not found on crates.io | Crate doesn't exist under that name | System tray is `tauri = { features = ["tray-icon"] }` — it's a built-in feature |
+| Runtime hotkey re-registration silently fires both old and new shortcut | Registered `Shortcut` objects are not auto-deregistered on drop | Hold old `Shortcut` in `CurrentShortcut(Mutex<Shortcut>)` state; call `unregister` explicitly before registering new one |
+| `KeyboardEvent.key` ("j", "J") fails on non-QWERTY layouts for hotkey capture | `.key` is layout-dependent — produces wrong characters on AZERTY etc. | Use `KeyboardEvent.code` ("KeyJ") — physical key position, layout-independent |
+| `window.outer_position()` returns wrong coordinates after first show | WKWebView reports position before the OS compositor has committed the final frame | Restore position on `tauri://focus` event (not on startup) after 80 ms mouseup delay for save |
 
 </details>
 
@@ -1031,7 +1181,7 @@ No telemetry, no analytics, no crash reporting. The only outbound request is the
 Activity Monitor (macOS) or Task Manager (Windows) → find "Junk" → force-quit. By design, ⌘Q and × hide the window so the global shortcut stays alive. This is explained in the Credits section of the Preferences panel.
 
 **Q: ⌘J conflicts with another app. Can I change it?**
-Not yet via UI — it's hardcoded in `main.rs` (`Code::KeyJ`). Change `KeyJ` to any `Code::*` variant and rebuild. A custom shortcut preference pane is on the roadmap.
+Yes — open Preferences (⌘,), click the shortcut field, and press any key combo. Junk re-registers the OS hotkey immediately, no restart needed. The new key persists in `localStorage`.
 
 **Q: Where is my data if I uninstall?**
 `~/Library/WebKit/com.paulfleury.junk/` on macOS. Delete that folder to wipe all content.
@@ -1057,6 +1207,26 @@ No. One window, one scratchpad. This is a design constraint: multiple windows re
 ---
 
 ## Changelog
+
+### v3.0.0 — 2026-06-04
+
+The "power user" release — six new features shipping in a single tag. Every one is toggleable, persisted to `localStorage`, and zero-restart.
+
+- **Custom shortcut** — click the shortcut field in Preferences and press any key. Junk unregisters the old OS hotkey and registers the new one at runtime. No restart. Saved as `localStorage['junk-hotkey']`. Key is passed as `KeyboardEvent.code` (layout-independent) → `parse_key_code()` in Rust maps it to `global-shortcut`'s `Code` enum. A `CurrentShortcut(Mutex<Shortcut>)` Tauri managed state holds the active `Shortcut` object so the previous registration can be explicitly unregistered before the new one is created — otherwise both would fire simultaneously.
+
+- **Window position memory** — `get_window_position` / `set_window_position` IPC commands using Tauri's `PhysicalPosition`. JS saves on `mouseup` after any drag (80 ms delay to let OS settle). Restored on `tauri://focus` event so position is correct from the first show. Off-screen guard: positions with `x < -100`, `y < -100`, `x > screen.width + 200`, or `y > screen.height + 200` are silently discarded (protects against position memory across monitor layout changes). New capability permissions `core:window:allow-outer-position` and `core:window:allow-set-position` added to `capabilities/default.json`.
+
+- **Font size** — slider 14–28 px. Drives `--font-size` CSS custom property on `:root`. Both the `<textarea>` and the Markdown preview `<div>` consume `var(--font-size)` directly — no JS duplication. Saved as `localStorage['junk-font-size']`.
+
+- **Dark mode** — three buttons: Light / Auto / Dark. Auto reads `window.matchMedia('(prefers-color-scheme: dark)')` and attaches a live `.addEventListener('change', ...)` — dark mode follows the OS without a restart or page reload. Applied via `data-theme="dark"` attribute on `:root`. Full CSS variable set for dark theme: `--bg-glass: rgba(30,30,35,0.88)`, `--text: #e8e8f0`, `--border: rgba(255,255,255,0.10)`, adjusted box-shadows. Saved as `localStorage['junk-theme']`.
+
+- **Markdown preview** — inline ~80-line parser (no external library, zero bytes added to the bundle). Handles: h1/h2/h3, **bold**, _italic_, `inline code`, fenced code blocks, blockquotes, `---` HR, `- ` unordered lists, `1. ` ordered lists, `[text](url)` links. Toggle: `⌘M`/`Ctrl+M`, the footer markdown button, or the Preferences toggle. Raw text is always stored; the preview is render-only. Saved as `localStorage['junk-md-mode']`.
+
+- **Export** — `navigator.clipboard.writeText(textarea.value)` from the footer copy button and the Preferences "Copy all text" button. Shows "Copied!" for 1.5 s then reverts. Works in both raw and Markdown-preview mode (always exports raw text).
+
+**Rust additions (main.rs):** `CurrentShortcut(Mutex<Shortcut>)` managed state; `set_hotkey(app, key, state)` command; `get_window_position(app)` → `WindowPosition { x: i32, y: i32 }`; `set_window_position(app, x, y)` using `PhysicalPosition::new(x, y)`; `parse_key_code(key: &str) → Result<Code, String>`. All 9 IPC commands registered in `invoke_handler![]`.
+
+---
 
 ### v2.8.0 — 2026-04-14
 
@@ -1154,12 +1324,13 @@ Pull requests are welcome. A few conventions before opening one:
 
 ## Roadmap
 
-- **Custom shortcut** via Preferences — change ⌘J to any key combo
-- **Window position memory** — remember where you dragged it between sessions
-- **Font size preference** — currently fixed at 22px / 1.8 line-height
-- **Dark mode** — automatic or manual toggle; frosted glass adapts naturally
-- **Markdown rendering mode** — toggle between raw text and rendered preview (off by default)
-- **Plain-text export** — one-click copy of all content to clipboard
+All v3.0.0 features are shipped. Possible future directions:
+
+- **Multi-scratchpad** — named scratch buffers, switchable via shortcut
+- **Image paste** — capture and store a screenshot clip inside Junk
+- **Encrypted local storage** — optional passphrase-protected content
+- **Cross-platform sync** — local-only (no server), LAN-only sync option
+- **Tauri v2 iOS/Android** — read-only clipboard viewer on mobile
 
 ---
 
