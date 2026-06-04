@@ -1,7 +1,7 @@
 {
   "name": "junk",
   "version": "2.8.0",
-  "description": "Global-hotkey scratchpad — ⌘J/Ctrl+J to summon a floating notepad anywhere.",
+  "description": "Global-hotkey scratchpad \u2014 \u2318J/Ctrl+J to summon a floating notepad anywhere.",
   "private": true,
   "scripts": {
     "tauri": "tauri",
@@ -18,7 +18,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paulfleury/junk"
+    "url": "https://github.com/paulfxyz/junk"
   },
   "keywords": [
     "tauri",
@@ -29,5 +29,6 @@
     "macos",
     "windows",
     "linux"
-  ]
+  ],
+  "homepage": "https://thejunk.app"
 }

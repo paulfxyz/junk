@@ -7,6 +7,8 @@ edition = "2021"
 rust-version = "1.70"
 description = "A global-hotkey scratchpad — press ⌘J/Ctrl+J to summon a floating notepad anywhere."
 authors = ["Paul Fleury"]
+homepage = "https://thejunk.app"
+repository = "https://github.com/paulfxyz/junk"
 license = "MIT"
 # Exclude the JS/HTML frontend artefacts from a hypothetical crates.io publish.
 # In practice this crate is never published, but it keeps `cargo package` clean.
