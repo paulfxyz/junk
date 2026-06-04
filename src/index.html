@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.0.1)
+  Junk — frontend (v3.0.2)
   ═══════════════════════════════════════════════════════════════════════════════
 
   New in v3.0.0:
@@ -59,11 +59,7 @@
       --accent-hover:     #4848e0;
       --danger:           #e04040;
       --success:          #22c55e;
-      --shadow:
-        0 32px 80px rgba(0,0,0,0.22),
-        0 8px  24px rgba(0,0,0,0.12),
-        inset 0 -1px 0 rgba(0,0,0,0.06),
-        inset 0 1px 0 rgba(255,255,255,0.90);
+      --shadow: none; /* box-shadow defined directly on .window */
       --scrollbar-track:  transparent;
       --scrollbar-thumb:  rgba(0,0,0,0.15);
       --prefs-bg:         rgba(250,250,250,0.96);
@@ -90,11 +86,7 @@
       --accent-hover:     #9090ff;
       --danger:           #f87171;
       --success:          #4ade80;
-      --shadow:
-        0 32px 80px rgba(0,0,0,0.55),
-        0 8px  24px rgba(0,0,0,0.35),
-        inset 0 -1px 0 rgba(0,0,0,0.3),
-        inset 0 1px 0 rgba(255,255,255,0.06);
+      --shadow: none; /* box-shadow defined directly on .window */
       --scrollbar-track:  transparent;
       --scrollbar-thumb:  rgba(255,255,255,0.12);
       --prefs-bg:         rgba(24,24,28,0.98);
@@ -109,41 +101,40 @@
     /* ── Reset ──────────────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Body / root — transparent so backdrop-filter shows through ────────── */
-    /* macOS fix: set border-radius on html/body so the WebView's own clipping  */
-    /* region matches the .window shape — prevents black square corners.        */
-    html {
+    /* ── Body / root — fully transparent ──────────────────────────────── */
+    /* On macOS, NSVisualEffectView (via window-vibrancy Rust crate) is the      */
+    /* background AND handles corner clipping — html/body must be fully         */
+    /* transparent so the vibrancy layer shows through.                         */
+    html, body {
       width: 100%; height: 100%;
-      background: transparent;
+      background: transparent !important;
       overflow: hidden;
-      border-radius: 14px;  /* must match .window border-radius */
-    }
-    body {
-      width: 100%; height: 100%;
-      background: transparent;
-      overflow: hidden;
-      border-radius: 14px;
       font-family: 'Space Grotesk', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
 
     /* ── Main window container ──────────────────────────────────────────────── */
+    /* On macOS: background is transparent — NSVisualEffectView (vibrancy) is   */
+    /*   the actual background. We only add a very subtle ring via box-shadow.  */
+    /* On Windows/Linux: keep the frosted glass CSS background + backdrop-blur. */
     .window {
       position: fixed; inset: 0;
       display: flex; flex-direction: column;
       background: var(--bg-glass);
       backdrop-filter: blur(40px) saturate(180%);
       -webkit-backdrop-filter: blur(40px) saturate(180%);
-      /* Use outline for the border ring — doesn't affect layout geometry       */
-      /* and avoids the 1px black rectangle that border can create on macOS.   */
       border: none;
-      outline: 1px solid var(--border);
-      outline-offset: -1px;
       border-radius: 14px;
-      box-shadow: var(--shadow);
+      /* Subtle ring + drop shadow visible on all platforms.                    */
+      /* On macOS the vibrancy layer is beneath; these sit on top of it.        */
+      box-shadow:
+        0 0 0 0.5px rgba(0,0,0,0.18),          /* 0.5px inner ring — crisp edge  */
+        0 0 0 1px   rgba(255,255,255,0.30),     /* white glow ring               */
+        0 20px 60px rgba(0,0,0,0.28),           /* ambient drop shadow           */
+        0  4px 16px rgba(0,0,0,0.16);           /* tight under-shadow            */
       overflow: hidden;
       animation: fly-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-      transition: background 0.2s, outline-color 0.2s;
+      transition: background 0.2s;
     }
 
     @keyframes fly-in {
@@ -715,7 +706,7 @@
             &nbsp;·&nbsp;
             To fully quit: Activity Monitor → Junk → quit
           </span>
-          <span id="current-version">v3.0.1</span>
+          <span id="current-version">v3.0.2</span>
         </div>
 
       </div>
@@ -1567,7 +1558,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.0.1 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.0.2 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

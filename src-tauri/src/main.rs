@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Junk — a global-hotkey scratchpad built with Tauri v2
 //
-// Architecture overview (v3.0.1)
+// Architecture overview (v3.0.2)
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // ┌──────────────────────────────────────────────────────────────────────────┐
@@ -55,6 +55,15 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+// Native window vibrancy/blur effects.
+// macOS: NSVisualEffectView with corner_radius — the ONLY way to get truly
+//   rounded corners (CSS border-radius cannot clip the WKWebView frame).
+// Windows: Acrylic blur effect (Windows 10/11).
+#[cfg(target_os = "macos")]
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+#[cfg(target_os = "windows")]
+use window_vibrancy::apply_acrylic;
 
 // ── Shared state ──────────────────────────────────────────────────────────────
 
@@ -589,6 +598,43 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             set_macos_activation_policy(handle);
+
+            // ── Native window effects ──────────────────────────────────────────
+            // Apply OS-level vibrancy / blur BEFORE showing the window.
+            // This is the only reliable way to get truly rounded corners on macOS:
+            // NSVisualEffectView with corner_radius clips the entire compositor
+            // layer — CSS border-radius cannot do this for WKWebView.
+            if let Some(window) = handle.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                {
+                    // HudWindow = a neutral frosted glass that adapts to light/dark.
+                    // corner_radius = 14.0 px — matches the CSS border-radius on .window.
+                    // state = None — let the system choose FollowsWindowActiveState.
+                    if let Err(e) = apply_vibrancy(
+                        &window,
+                        NSVisualEffectMaterial::HudWindow,
+                        None,
+                        Some(14.0),
+                    ) {
+                        log::warn!("apply_vibrancy failed (non-fatal): {e}");
+                    } else {
+                        log::info!("macOS vibrancy applied (HudWindow, r=14)");
+                    }
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    // Acrylic effect: semi-transparent blur tinted white.
+                    // None = no tint override (uses system acrylic colour).
+                    // Note: has performance cost when resizing on Windows 11 22621+;
+                    // acceptable for a small scratchpad window.
+                    if let Err(e) = apply_acrylic(&window, None) {
+                        log::warn!("apply_acrylic failed (non-fatal): {e}");
+                    } else {
+                        log::info!("Windows acrylic effect applied");
+                    }
+                }
+            }
 
             // Register OS-level global shortcuts
             match register_toggle_shortcut(handle) {

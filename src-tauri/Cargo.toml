@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "3.0.1"
+version = "3.0.2"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -91,3 +91,14 @@ strip = "debuginfo"
 # Abort on panic in release mode — panics should never reach users, and abort
 # produces smaller binaries than the default unwind (no stack-unwinding tables).
 panic = "abort"
+
+# ── Platform-specific: native window effects ──────────────────────────────────
+# window-vibrancy is the only reliable way to get truly rounded corners on macOS.
+# CSS border-radius does NOT clip the WKWebView frame — only NSVisualEffectView
+# with a corner_radius achieves pixel-perfect rounding at the OS compositor level.
+# The same crate version is already used by Tauri internally (same raw-window-handle).
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+window-vibrancy = "0.6"
