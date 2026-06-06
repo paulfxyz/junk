@@ -4,6 +4,21 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.0.8] — 2026-06-06
+
+### Fix: restore clean index.html, resolves windowEl ReferenceError
+
+#### Fixed
+- **Critical JS crash on macOS** — `ReferenceError: Can't find variable: windowEl` crashed
+  all JavaScript in the WebKit/WKWebView renderer. Root cause: the deep-comment pass in
+  v3.0.4 rewrote `index.html` from 1567 → 2067 lines. The resulting file passes Node.js
+  syntax checks but triggers a JavaScriptCore-specific parsing failure at runtime, making
+  all IPC (clipboard, markdown toggle, settings, drag) non-functional.
+- Fix: reverted `src/index.html` to commit `4a18c56` (pre-deep-comment, 1567 lines,
+  proven working). All buttons and drag restore to full working order.
+
+---
+
 ## [3.0.7] — 2026-06-06
 
 ### Revert broken footer changes; restore working state

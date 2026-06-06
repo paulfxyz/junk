@@ -719,106 +719,24 @@
   </div><!-- end .window -->
 
   <script type="module">
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Junk — frontend script  (v3.0.0)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // Junk — frontend script (v3.0.0)
     //
-    // ARCHITECTURE OVERVIEW
-    // ─────────────────────
-    // Junk is a Tauri v2 menubar/tray app: a Rust backend manages the window
-    // lifecycle and OS integrations, while this <script type="module"> owns all
-    // UI logic.  The two sides communicate exclusively over Tauri's IPC bridge
-    // (invoke/listen).  There are NO bundlers, NO npm packages, NO CDN fetches —
-    // everything that runs here is either browser-native or written inline below.
+    // New features this version:
+    //   1. Custom shortcut  — hotkey-key-input captures keydown, calls set_hotkey()
+    //   2. Position memory  — saves outer_position after every drag, restores on show
+    //   3. Font size        — slider 14–28px, saved to localStorage
+    //   4. Dark mode        — light/auto/dark buttons, respects prefers-color-scheme
+    //   5. Markdown preview — lightweight inline parser, toggled via ⌘M
+    //   6. Export           — copies textarea content to clipboard from prefs
     //
-    // ZERO-DEPENDENCY PHILOSOPHY
-    // ──────────────────────────
-    // External JS libraries are intentionally absent.  A scratchpad needs to be
-    // fast, offline-capable, and auditable at a glance.  The total surface area
-    // of this file is ~150 lines of logic plus comments — no tree-shaking needed.
-    // Where a library would normally be reached for (markdown parsing, clipboard,
-    // media queries), the browser already ships the primitive we need.
-    //
-    // FEATURE SUMMARY  (what each numbered block does)
-    // ─────────────────────────────────────────────────
-    //   1. Custom shortcut  — hotkeyInput captures keydown → Rust re-registers
-    //                         the global shortcut via set_hotkey().
-    //   2. Position memory  — physical screen coords saved after every drag;
-    //                         restored every time the window becomes visible.
-    //   3. Font size        — slider 14–28 px; driven by --font-size CSS var.
-    //   4. Dark mode        — light / auto / dark; 'auto' uses matchMedia so
-    //                         theme reacts to OS changes in real time.
-    //   5. Markdown preview — tiny self-contained inline parser (~80 lines);
-    //                         toggled via ⌘M.  Raw text always preserved.
-    //   6. Export           — navigator.clipboard.writeText copies textarea text.
-    //
-    // IPC BRIDGE DESIGN  (why getInvoke looks the way it does)
-    // ──────────────────────────────────────────────────────────
-    // Tauri v2 exposes two paths to the invoke function:
-    //
-    //   A) window.__TAURI_INTERNALS__.invoke
-    //      The "always-there" internal path.  Injected by Tauri's JS runtime
-    //      before the first frame.  Does not require withGlobalTauri: true.
-    //      Used as the primary path because it's guaranteed to be synchronously
-    //      available when this module executes.
-    //
-    //   B) window.__TAURI__.core.invoke
-    //      The public-API path that is ONLY present when the app is built with
-    //      tauri.conf.json → app.withGlobalTauri: true.
-    //      Used as fallback in case the internals path is ever removed.
-    //
-    // WHY we need withGlobalTauri: true even though invoke uses __TAURI_INTERNALS__:
-    //   The event system (window.__TAURI__.event.listen) has NO __TAURI_INTERNALS__
-    //   equivalent — the listen function lives exclusively on the public global.
-    //   Therefore withGlobalTauri must be true just to wire up tauri://focus.
-    //
-    // LOCALSTORAGE STRATEGY
-    // ─────────────────────
-    // All persistent UI state lives in localStorage, not in Rust's config files.
-    // The rationale: these preferences are pure UI concerns.  Rust doesn't need
-    // to know the font size or theme; storing them in the browser keeps the IPC
-    // surface minimal and makes the state readable/writable without a round-trip.
-    //
-    //   KEY_CONTENT     — the raw textarea text (saved on every keystroke, 300ms
-    //                     debounced so we don't thrash the disk on fast typing).
-    //   KEY_AUTO_UPDATE — 'true'|'false'; gate for the silent startup check.
-    //   KEY_FONT_SIZE   — integer px string, range 14–28.
-    //   KEY_THEME       — 'light'|'auto'|'dark' preference token.
-    //   KEY_MD_MODE     — 'true'|'false'; whether MD preview was active last session.
-    //   KEY_HOTKEY      — KeyboardEvent.code string (e.g. 'KeyJ').  Rust holds the
-    //                     live registration; localStorage holds the intent across restarts.
-    //   KEY_WIN_POS     — JSON {x, y} in PhysicalPosition units (device pixels).
-    //   KEY_WIN_SIZE    — JSON {w, h} in logical pixels (Tauri inner size).
-    //
-    // STARTUP SEQUENCE  (order matters — see initiation block at the bottom)
-    // ────────────────────────────────────────────────────────────────────────
-    //   1. loadContent()          — populate textarea before anything paints.
-    //   2. loadFontSize()         — apply --font-size var before layout calculates.
-    //   3. loadTheme()            — set data-theme before paint to avoid flash.
-    //   4. loadMdMode()           — show editor or preview pane immediately.
-    //   5. initHotkeyDisplay()    — populate the hotkey input field (no IPC yet).
-    //   6. setupTauriEvents()     — start polling for window.__TAURI__.event.listen.
-    //   7. maybeAutoCheckOnStartup() — delayed update check (2 s, non-blocking).
-    //   8. restoreWindowPosition()   — move window to saved position.
-    //   9. restoreHotkey()        — LAST: IPC call to re-register in Rust.
-    //                               Must be last because it may fail silently and
-    //                               should never block content display.
-    //
-    // ═══════════════════════════════════════════════════════════════════════════
+    // IPC bridge (v2.8.0+):
+    //   getInvoke() uses __TAURI_INTERNALS__.invoke (always available) with
+    //   __TAURI__.core.invoke as fallback. withGlobalTauri:true is required
+    //   for event listening (window.__TAURI__.event.listen).
+    // ═══════════════════════════════════════════════════════════════════════
 
-
-    // ── IPC helpers ─────────────────────────────────────────────────────────────
-    //
-    // getInvoke() is a lazy resolver — it reads the global namespace each time
-    // it's called rather than caching at module-load time.  This is intentional:
-    // Tauri may finish injecting __TAURI_INTERNALS__ fractionally after DOMContentLoaded
-    // on slower machines, so caching null at module parse time would break early calls.
-    //
-    // Resolution order:
-    //   1. __TAURI_INTERNALS__.invoke  — internal, always injected, v2 preferred
-    //   2. __TAURI__.core.invoke       — public API, requires withGlobalTauri:true
-    //   3. null                        — running in a plain browser (dev preview /
-    //                                   direct file open); all ipc() calls no-op.
+    // ── IPC helpers ─────────────────────────────────────────────────────────
 
     function getInvoke() {
       return (
@@ -828,10 +746,6 @@
       );
     }
 
-    // ipc() is a thin wrapper around invoke that:
-    //   • guards against a missing bridge (logs + returns undefined instead of throw)
-    //   • logs every failed call with command name for easy debugging
-    //   • re-throws so callers that care about errors can still catch them
     async function ipc(command, args = {}) {
       const invoke = getInvoke();
       if (!invoke) {
@@ -846,13 +760,7 @@
       }
     }
 
-    // ── DOM refs ──────────────────────────────────────────────────────────────
-    //
-    // All element references are captured once at module load time — this is the
-    // standard "cache your selectors" pattern.  getElementById is O(1) and fast,
-    // but repeated calls on every keystroke or animation frame add up.  Storing
-    // refs in constants also makes the dependency on specific element IDs explicit
-    // and easy to audit: if the HTML ID changes, exactly one line here breaks.
+    // ── DOM refs ─────────────────────────────────────────────────────────────
     const editor          = document.getElementById('editor');
     const mdPreview       = document.getElementById('md-preview');
     const saveStatus      = document.getElementById('save-status');
@@ -878,14 +786,6 @@
     const themeBtns       = document.querySelectorAll('.theme-btn');
 
     // ── localStorage keys ────────────────────────────────────────────────────
-    //
-    // Defined as constants (not inline strings) so:
-    //   (a) typos produce a ReferenceError at parse time rather than silently
-    //       writing to the wrong key at runtime.
-    //   (b) grep / refactor is trivial — one canonical definition per key.
-    //
-    // All keys are prefixed 'junk-' to avoid collisions with any other WebView
-    // content that might share the same origin in future Tauri versions.
     const KEY_CONTENT     = 'junk-content';
     const KEY_AUTO_UPDATE = 'junk-auto-update';
     const KEY_FONT_SIZE   = 'junk-font-size';
@@ -896,66 +796,26 @@
     const KEY_WIN_SIZE    = 'junk-win-size';    // JSON {w,h}
 
     // ── Content persistence ──────────────────────────────────────────────────
-    //
-    // The note text lives entirely in localStorage — no server, no file I/O at
-    // the JS layer (Rust does not persist the text at all).  This makes reads
-    // and writes synchronous and instantaneous.  The practical limit for
-    // localStorage values is ~5 MB per origin, well above anything a scratchpad
-    // note would reach.
-
     function loadContent() {
-      // Guard: only assign if a saved value exists — avoids replacing placeholder
-      // text (empty string) with null / "null" if the key was never set.
       const saved = localStorage.getItem(KEY_CONTENT);
       if (saved !== null) editor.value = saved;
     }
 
-    // saveTimer holds the pending debounce handle.  A module-level variable (not
-    // a closure inside scheduleSave) so any call path — input handler, paste
-    // handler, clipboard copy — can all share the same debounce slot and only one
-    // write happens after the dust settles.
     let saveTimer = null;
     function saveContent() {
       localStorage.setItem(KEY_CONTENT, editor.value);
-
-      // CSS animation trick to replay the "saved" fade:
-      //   1. Set the label text.
-      //   2. Remove the 'saving' class (stops any in-progress animation).
-      //   3. Force a reflow with void offsetWidth — without this, removing then
-      //      immediately re-adding the class in the same JS task is a no-op
-      //      because the browser batches style recalculations.
-      //   4. Re-add 'saving' to restart the animation from frame 0.
       saveStatus.textContent = 'saved';
       saveStatus.classList.remove('saving');
-      void saveStatus.offsetWidth;   // force reflow — see comment above
+      void saveStatus.offsetWidth;
       saveStatus.classList.add('saving');
-
-      // Keep the MD preview live while typing — re-render on every confirmed save
-      // (which fires at most every 300 ms thanks to the debounce below).
       if (mdMode) renderMarkdown();
     }
-
-    // scheduleSave implements a 300 ms trailing-edge debounce.
-    //
-    // WHY 300 ms?  Short enough to feel instant after pausing, but long enough
-    // to batch rapid keypresses (≥3 chars/s) into a single write.  localStorage
-    // writes are synchronous and block the main thread; at 300 ms we never
-    // compete with a keydown-to-paint cycle.
-    //
-    // Calling clearTimeout with null is a safe no-op, so no guard is needed.
     function scheduleSave() {
       if (saveTimer !== null) clearTimeout(saveTimer);
       saveTimer = setTimeout(saveContent, 300);
     }
 
     // ── Focus ────────────────────────────────────────────────────────────────
-    //
-    // focusEditor always places the cursor at the end of the text (not the
-    // beginning, which is the browser default for programmatic focus).  This
-    // matches the mental model of a scratchpad: you pick up where you left off.
-    //
-    // preventScroll: false means the textarea scrolls to reveal the cursor if the
-    // text is long enough to overflow — important for usability after a restore.
     function focusEditor() {
       if (!mdMode) {
         editor.focus({ preventScroll: false });
@@ -965,15 +825,6 @@
     }
 
     // ── Fly-in ───────────────────────────────────────────────────────────────
-    //
-    // Replays the CSS entrance animation on the #window element.  The technique:
-    //   1. Set animationName to 'none' (overrides the CSS rule, stopping animation).
-    //   2. Read offsetWidth to force a style flush — same reflow trick as saveContent.
-    //   3. Clear the inline style (CSS rule takes over again) so the animation
-    //      starts from frame 0.
-    // Wrapped in requestAnimationFrame so it runs after the current paint
-    // completes, giving the browser time to have actually made the window visible
-    // before we try to animate it.
     function triggerFlyIn() {
       requestAnimationFrame(() => {
         windowEl.style.animationName = 'none';
@@ -983,10 +834,6 @@
     }
 
     // ── Hide window ──────────────────────────────────────────────────────────
-    //
-    // Delegates to Rust — only Rust can hide a Tauri window without a visible
-    // "minimize" flicker.  The JS side has no other teardown to do (state is
-    // already in localStorage from the last keystroke's debounced save).
     async function hideWindow() {
       await ipc('hide_window');
     }
@@ -995,38 +842,25 @@
     // FEATURE 1: Custom shortcut
     // ════════════════════════════════════════════════════════════════════════
     //
-    // Global shortcuts in Tauri are registered in Rust via tauri_plugin_global_shortcut.
-    // The JS side cannot register OS-level shortcuts directly — it must ask Rust
-    // to do it over IPC.  The flow is:
+    // The user clicks the hotkey input field, then presses any key.
+    // We capture the KeyboardEvent.code (e.g. "KeyK") and send it to Rust
+    // via invoke('set_hotkey', { key: "KeyK" }). Rust unregisters the old
+    // shortcut and registers the new one. No restart needed.
     //
-    //   User clicks hotkeyInput  →  enter "capturing" mode (visual feedback)
-    //   User presses a key       →  read e.code  →  ipc('set_hotkey', { key })
-    //   Rust unregisters old shortcut, registers new one  →  confirms via promise
-    //   JS saves code to localStorage  →  displayed in the input field
+    // Stored in localStorage so on next launch we display the saved key.
+    // (The Rust side always registers KeyJ by default — JS calls set_hotkey
+    // on startup if a custom key is saved.)
     //
     // WHY KeyboardEvent.code and not .key?
-    //   .key gives a character like "j" — it is locale- and modifier-aware, so
-    //   it changes with CapsLock, dead keys, and non-Latin keyboard layouts.
-    //   .code gives the physical key name like "KeyJ" — layout-independent.
-    //   tauri_plugin_global_shortcut::Code matches .code names exactly, so this
-    //   is the only correct choice.  Never use .key for hotkey registration.
-    //
-    // WHY store in localStorage?
-    //   Rust registers the shortcut ephemerally (lost on restart).  The default
-    //   is hardcoded to KeyJ in Rust, so without localStorage the user's custom
-    //   key would vanish after every quit.  On startup, restoreHotkey() re-sends
-    //   the saved code to Rust to reactivate the registration.
+    //   .key gives "j" (layout-dependent, affected by CapsLock/shift).
+    //   .code gives "KeyJ" — layout-independent physical key name. This is
+    //   what tauri_plugin_global_shortcut::Code uses. Always use .code.
 
     let hotkeyCapturing = false;
-    // Read the saved code on load so the module-level var is always in sync with
-    // what restoreHotkey() will send to Rust.
     let currentHotkey = localStorage.getItem(KEY_HOTKEY) || 'KeyJ';
 
     function displayHotkey(code) {
-      // Translate the raw .code value into a human-readable label for the input:
-      //   'KeyJ'   → 'J'   (strip leading 'Key')
-      //   'Digit3' → '3'   (strip leading 'Digit')
-      //   'Space'  → '␣'   (replace with visible space symbol)
+      // Map Code name to a human-readable display label
       const label = code
         .replace(/^Key/, '')
         .replace(/^Digit/, '')
@@ -1035,9 +869,7 @@
     }
 
     function initHotkeyDisplay() {
-      // Show the platform-correct modifier prefix in the UI.
-      // navigator.platform is deprecated but still reliable for Mac detection
-      // inside a Tauri WebView where we control the environment.
+      // Show the platform modifier
       const isMac = navigator.platform.toUpperCase().includes('MAC') ||
                     navigator.userAgent.includes('Macintosh');
       hotkeyModifier.textContent = isMac ? '⌘' : 'Ctrl';
@@ -1047,15 +879,12 @@
     async function applyHotkey(code) {
       try {
         await ipc('set_hotkey', { key: code });
-        // Only persist after Rust confirms success — if the key is already taken
-        // by another app, Rust throws and we never reach localStorage.setItem.
         currentHotkey = code;
         localStorage.setItem(KEY_HOTKEY, code);
         displayHotkey(code);
         setHotkeyStatus('Shortcut saved', 'ok');
         setTimeout(() => setHotkeyStatus('', ''), 2000);
       } catch (err) {
-        // Common failure: another app holds the same key combination.
         setHotkeyStatus('Key not available', 'error');
         setTimeout(() => setHotkeyStatus('', ''), 3000);
         console.error('[hotkey] set_hotkey failed:', err);
@@ -1067,8 +896,7 @@
       hotkeyStatus.className = cls;
     }
 
-    // Clicking the input enters "capturing" mode — the input shows '…' and
-    // any keydown (except Escape / bare modifiers) will be treated as the new hotkey.
+    // Click the input to start capturing; Esc to cancel
     hotkeyInput.addEventListener('click', () => {
       hotkeyCapturing = true;
       hotkeyInput.style.borderColor = 'var(--accent)';
@@ -1078,12 +906,10 @@
 
     hotkeyInput.addEventListener('keydown', async (e) => {
       if (!hotkeyCapturing) return;
-      // Eat the event entirely so no other listener (including the global
-      // shortcut handler below) misinterprets it while we're capturing.
       e.preventDefault(); e.stopPropagation();
 
       if (e.code === 'Escape') {
-        // Cancel without changing anything — restore the currently active code.
+        // Cancel capture, restore previous value
         hotkeyCapturing = false;
         hotkeyInput.style.borderColor = '';
         displayHotkey(currentHotkey);
@@ -1091,32 +917,27 @@
         return;
       }
 
-      // Pressing a bare modifier (⌘, Ctrl, Shift, Alt) by itself is not a
-      // meaningful shortcut key — ignore it and keep capturing.
+      // Ignore bare modifier keys
       if (['MetaLeft','MetaRight','ControlLeft','ControlRight',
            'ShiftLeft','ShiftRight','AltLeft','AltRight'].includes(e.code)) {
         return;
       }
 
-      // Any other key: exit capturing mode and attempt to register.
       hotkeyCapturing = false;
       hotkeyInput.style.borderColor = '';
       await applyHotkey(e.code);
     });
 
-    // restoreHotkey re-sends the saved shortcut to Rust on every app launch.
-    // KeyJ is Rust's compiled-in default, so we only need an IPC call if the
-    // user chose something different.  On failure (e.g. conflict after a reboot),
-    // we silently drop back to KeyJ and remove the stale localStorage entry.
+    // Restore saved hotkey on startup
     async function restoreHotkey() {
       const saved = localStorage.getItem(KEY_HOTKEY);
       if (saved && saved !== 'KeyJ') {
-        // Re-register the saved shortcut in Rust without changing localStorage.
+        // Re-register the saved shortcut in Rust without changing localStorage
         try {
           await ipc('set_hotkey', { key: saved });
           currentHotkey = saved;
         } catch (err) {
-          // If registration fails (key conflict etc.) fall back to KeyJ.
+          // If registration fails (key conflict etc.) fall back to KeyJ
           localStorage.removeItem(KEY_HOTKEY);
           currentHotkey = 'KeyJ';
         }
@@ -1128,32 +949,21 @@
     // FEATURE 2: Window position memory
     // ════════════════════════════════════════════════════════════════════════
     //
-    // Menubar apps feel broken if they jump to screen-center every time they
-    // appear.  We fix this by saving the window's OS-level coordinates after
-    // every drag and restoring them when the window is next shown.
+    // After every drag, we save the window's outer_position to localStorage.
+    // On startup (and every time the window is shown via tauri://focus), we
+    // call set_window_position() to restore it.
     //
-    // WHY physical (device pixel) coordinates?
-    //   Tauri's get_window_position() returns a PhysicalPosition — raw device
-    //   pixels, independent of DPI scaling.  If we used logical coords and the
-    //   user's display scale factor changed (e.g. they plugged into an external
-    //   monitor), the restored position would land in the wrong place.  Physical
-    //   coordinates are the source of truth for the OS window manager.
+    // WHY physical coordinates?
+    //   Tauri's outer_position() returns PhysicalPosition — pixel-exact screen
+    //   coords that don't change with display scaling. Logical coords would
+    //   give wrong results on Retina/HiDPI displays when scale factors change.
     //
     // OFF-SCREEN GUARD:
-    //   Multi-monitor users sometimes close the app while it's on a second screen,
-    //   then later use only their primary display.  We detect an obviously
-    //   out-of-bounds position and skip restoration rather than hiding the window
-    //   behind/beyond the visible area.
-    //
-    //   Thresholds:  x < -100 || y < -100  (slight overhang is valid on macOS
-    //   for windows that dock against the menu bar; -100 means fully gone)
-    //                x > screen.width + 200 || y > screen.height + 200
-    //   (200 px of overhang is acceptable; more than that is inaccessible.)
-    //
-    // RESTORE ORDER (size before position):
-    //   We restore size before position.  If we did position first, then resized,
-    //   the resize could snap the window back to a default anchor point.  Setting
-    //   size then position ensures the window lands exactly where we intend.
+    //   If the saved position is outside the current screen geometry (user
+    //   moved to a smaller monitor), we skip restoration and let the window
+    //   stay centered. We detect "off-screen" as: x < -100 || y < -100 or
+    //   x > screen.width + 200 || y > screen.height + 200.
+    //   (We allow 200px overhang because a partially-visible window is fine.)
 
     let isDragging = false;
 
@@ -1163,25 +973,22 @@
         if (pos) {
           localStorage.setItem(KEY_WIN_POS, JSON.stringify({ x: pos.x, y: pos.y }));
         }
-        // Also save the window's logical size via the outer dimensions.
+        // Also save the window's logical size via the outer dimensions
         const size = await ipc('get_window_size');
         if (size) {
           localStorage.setItem(KEY_WIN_SIZE, JSON.stringify({ w: size.width, h: size.height }));
         }
       } catch (err) {
-        // Non-fatal — geometry just won't be saved this time.
+        // Non-fatal — geometry just won't be saved this time
         console.warn('[position] saveWindowGeometry failed:', err);
       }
     }
 
-    // Keep legacy alias for tauri://focus path — both names refer to the same
-    // function so old call-sites don't need updating if this file is patched.
+    // Keep legacy alias for tauri://focus path
     const saveWindowPosition = saveWindowGeometry;
 
     async function restoreWindowGeometry() {
-      // ── Step 1: Restore size ──────────────────────────────────────────────
-      // Sanity-check the saved dimensions: window must be at least 300×200 (usable)
-      // and at most 3000×2000 (not absurdly oversized, which could indicate corrupt data).
+      // Restore size first, then position (so the window lands in the right spot)
       const rawSize = localStorage.getItem(KEY_WIN_SIZE);
       if (rawSize) {
         try {
@@ -1194,16 +1001,13 @@
         }
       }
 
-      // ── Step 2: Restore position ──────────────────────────────────────────
       const rawPos = localStorage.getItem(KEY_WIN_POS);
       if (!rawPos) return;
 
       try {
         const { x, y } = JSON.parse(rawPos);
 
-        // Off-screen guard — skip if way outside current screen bounds.
-        // screen.width / screen.height report the primary display's CSS pixels,
-        // which is the best available JS approximation of "where can the user see".
+        // Off-screen guard — skip if way outside current screen bounds
         const sw = window.screen.width  + 200;
         const sh = window.screen.height + 200;
         if (x < -100 || y < -100 || x > sw || y > sh) {
@@ -1223,20 +1027,9 @@
     // FEATURE 3: Font size preference
     // ════════════════════════════════════════════════════════════════════════
     //
-    // WHY a CSS custom property (--font-size) instead of setting element styles
-    // directly?
-    //   Both #editor (the textarea) and #md-preview (the rendered HTML div) need
-    //   the same font size.  If we set element.style.fontSize on each, we'd have
-    //   two places to update — easy to forget one.  By writing once to
-    //   document.documentElement (the <html> element, i.e. :root), any element
-    //   in the entire document that references var(--font-size) in its CSS
-    //   automatically inherits the new value.  Add more text surfaces in future
-    //   without changing any JS.
-    //
-    // Range: 14–28 px.  14 px is the smallest readable size for the target
-    // platforms (macOS Retina, Windows ClearType).  28 px is comfortably large
-    // for users who prefer bigger text; beyond that the textarea starts to feel
-    // awkward for a scratchpad.
+    // We drive font size via a CSS custom property --font-size on :root.
+    // This means both #editor and #md-preview pick it up automatically —
+    // no JS needed to update both elements separately.
 
     function applyFontSize(px) {
       document.documentElement.style.setProperty('--font-size', `${px}px`);
@@ -1246,14 +1039,10 @@
 
     function loadFontSize() {
       const saved = parseInt(localStorage.getItem(KEY_FONT_SIZE), 10);
-      // If the saved value is outside the valid range (or NaN), default to 22 px
-      // — a comfortable mid-range size for most users.
       const size = (saved >= 14 && saved <= 28) ? saved : 22;
       applyFontSize(size);
     }
 
-    // 'input' fires on every slider thumb movement (continuous) so the preview
-    // updates live without needing a separate 'change' event.
     fontSizeSlider.addEventListener('input', () => {
       const px = parseInt(fontSizeSlider.value, 10);
       applyFontSize(px);
@@ -1264,33 +1053,18 @@
     // FEATURE 4: Dark mode
     // ════════════════════════════════════════════════════════════════════════
     //
-    // Three preference states:
-    //   'light'  — always light, ignores the OS setting.
-    //   'dark'   — always dark, ignores the OS setting.
-    //   'auto'   — follow window.matchMedia('(prefers-color-scheme: dark)').
-    //              Listens for changes so the theme updates instantly when the
-    //              user toggles OS dark mode — no polling, no page reload needed.
+    // Three modes: 'light', 'auto', 'dark'.
+    //   auto — reads window.matchMedia('(prefers-color-scheme: dark)')
+    //          and listens for changes in real time.
+    //   light / dark — hard overrides, ignore system preference.
     //
-    // Applied via data-theme="dark" on <html> (the :root element).
+    // Applied by setting data-theme="dark" or removing it on :root.
+    // All colours are driven by CSS custom properties so the switch is
+    // instant and transition-smooth.
     //
-    // WHY data-theme attribute rather than a class?
-    //   A data attribute is conventional for multi-theme systems (see Bootstrap,
-    //   Tailwind dark mode docs) because:
-    //   (a) it is semantically distinct from functional classes,
-    //   (b) :root[data-theme="dark"] is more explicit than :root.dark in CSS,
-    //   (c) removing the attribute entirely (for light mode) leaves no trace,
-    //       whereas toggling a class risks stale class pollution.
-    //
-    // WHY matchMedia instead of polling document.body.classList?
-    //   matchMedia registers a native OS-level listener.  The browser fires the
-    //   'change' event the moment the OS reports a preference change — typically
-    //   < 16 ms.  Any polling approach (setInterval) would be both slower to
-    //   react and wasteful of CPU/battery.
-    //
-    // WHY remove the listener when switching to a hard override (light/dark)?
-    //   If the user picks "dark" explicitly but then switches their OS to light,
-    //   the 'auto' listener would fight the explicit choice and flip the theme
-    //   back.  We must detach the listener before applying the override.
+    // WHY data-theme attribute instead of a class?
+    //   A data attribute on :root is cleaner for CSS selectors and is the
+    //   conventional approach for multi-theme apps.
 
     let themeMode = 'auto'; // persisted preference
     let darkModeMediaQuery = null;
@@ -1299,27 +1073,25 @@
       themeMode = mode;
       const root = document.documentElement;
 
-      // Update the button group's active state to reflect the selected mode.
+      // Update button active states
       themeBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.theme === mode);
       });
 
       if (mode === 'dark') {
         root.setAttribute('data-theme', 'dark');
-        // Stop listening to OS changes — the user has made an explicit choice.
         if (darkModeMediaQuery) {
           darkModeMediaQuery.removeEventListener('change', onSystemThemeChange);
           darkModeMediaQuery = null;
         }
       } else if (mode === 'light') {
         root.removeAttribute('data-theme');
-        // Same as 'dark': detach OS listener so it can't override the choice.
         if (darkModeMediaQuery) {
           darkModeMediaQuery.removeEventListener('change', onSystemThemeChange);
           darkModeMediaQuery = null;
         }
       } else {
-        // 'auto' — follow system; attach the OS listener if not already attached.
+        // 'auto' — follow system
         followSystemTheme();
       }
 
@@ -1327,22 +1099,16 @@
     }
 
     function onSystemThemeChange(e) {
-      // e.matches is true when (prefers-color-scheme: dark) is active.
-      // We setAttribute/removeAttribute rather than toggling because it's
-      // unambiguous — you can't accidentally end up with both states.
       document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : '');
       if (!e.matches) document.documentElement.removeAttribute('data-theme');
     }
 
     function followSystemTheme() {
-      // Guard: only create one MediaQueryList and attach one listener.
-      // Calling window.matchMedia() repeatedly is cheap, but multiple listeners
-      // would all fire on the same event and fight each other.
       if (!darkModeMediaQuery) {
         darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
         darkModeMediaQuery.addEventListener('change', onSystemThemeChange);
       }
-      // Apply current system preference immediately (don't wait for next change).
+      // Apply current system preference immediately
       if (darkModeMediaQuery.matches) {
         document.documentElement.setAttribute('data-theme', 'dark');
       } else {
@@ -1363,41 +1129,27 @@
     // FEATURE 5: Markdown preview
     // ════════════════════════════════════════════════════════════════════════
     //
-    // PARSER DESIGN — WHY NO EXTERNAL LIBRARY?
-    //   A full Markdown library (marked.js, micromark, remark) would require:
-    //     • a CDN <script> tag (network dependency, privacy concern, CSP issue), or
-    //     • a build step / bundler (adds npm, webpack/vite, node_modules).
-    //   Neither fits the zero-dependency philosophy of this app.  A scratchpad
-    //   only needs the 90 % case: headings, bold, italic, code, lists, links,
-    //   blockquotes, horizontal rules.  The inline parser below covers all of
-    //   these in ~80 lines with no edge-case complexity from the full CommonMark
-    //   spec (which is 100+ pages long).
+    // A lightweight inline Markdown parser — no external library needed.
+    // Handles the most common Markdown constructs used in scratchpad notes:
+    //   h1/h2/h3, bold, italic, inline code, fenced code blocks,
+    //   blockquotes, horizontal rules, unordered/ordered lists, links, br.
     //
-    // XSS PREVENTION:
-    //   The esc() helper is the first thing parseMarkdown() calls on any user-
-    //   supplied text before inserting it into the DOM via innerHTML.  This
-    //   converts <, >, and & into their HTML entity equivalents, so a user who
-    //   types <script>alert(1)</script> sees it rendered as literal text, not
-    //   executed.  Inline code spans get an additional pass through esc() so
-    //   that even code samples can't inject markup.
+    // WHY an inline parser instead of marked.js / micromark?
+    //   Bringing in an external library requires either a CDN link (network
+    //   dependency) or a bundler (adds build complexity). For a scratchpad
+    //   the common-case coverage of ~80 lines of vanilla JS is sufficient.
     //
-    // TOGGLING BEHAVIOUR:
-    //   Raw Markdown text always lives in the textarea (and localStorage).
-    //   The rendered HTML in mdPreview is purely ephemeral — it is re-generated
-    //   from the textarea value every time renderMarkdown() is called.  Switching
-    //   back to edit mode from preview never loses any content.
+    // TOGGLING:
+    //   When MD mode is on: textarea is hidden, mdPreview shows the rendered
+    //   HTML. The underlying text in localStorage is always the raw Markdown —
+    //   the preview is purely a read-time view.
     //
-    // KEYBOARD SHORTCUT:  ⌘M (macOS) / Ctrl+M (Win/Linux) — handled in the
-    //   global keydown listener below.
+    //   ⌘M (macOS) / Ctrl+M (Win/Linux) is the keyboard shortcut.
 
     let mdMode = localStorage.getItem(KEY_MD_MODE) === 'true';
 
     function parseMarkdown(raw) {
-      // ── HTML escaping ─────────────────────────────────────────────────────
-      // esc() is the XSS firewall.  It must be applied to ALL user-supplied text
-      // before it can touch innerHTML.  Called before inlineFormat() so that any
-      // < or > in the source cannot be misinterpreted as HTML by the later regex
-      // passes that insert <strong>, <em>, etc.
+      // Escape HTML first so user-typed < > & don't inject markup
       const esc = (s) => s
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -1405,39 +1157,27 @@
 
       const lines = raw.split('\n');
       const out = [];
-      // inFence tracks whether we are currently inside a ``` fenced code block.
-      // fenceLang records the optional language tag (``` js) for future syntax
-      // highlighting (currently unused but preserved for forward compatibility).
       let inFence = false;
       let fenceLang = '';
       let fenceBuffer = [];
-      // inUl / inOl track whether a list tag is currently open so we know when
-      // to emit the closing </ul> or </ol> upon encountering a non-list line.
       let inUl = false;
       let inOl = false;
 
-      // flushList emits any pending list closing tag.  Called before any block-
-      // level element (headings, blockquote, HR, paragraphs) so that a list is
-      // properly closed before the next block begins.
       function flushList() {
         if (inUl) { out.push('</ul>'); inUl = false; }
         if (inOl) { out.push('</ol>'); inOl = false; }
       }
 
       function inlineFormat(s) {
-        // Order matters here — inline code must be processed first.
-        // If we ran bold/italic regexes first, a string like `**not bold**`
-        // inside backticks would get wrapped in <strong> before esc() runs on
-        // the code content, potentially injecting markup.
+        // Inline code — process first so * inside `` is not treated as bold
         s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${esc(c)}</code>`);
-        // Bold: **text** or __text__
+        // Bold
         s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
-        // Italic: *text* or _text_
+        // Italic
         s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
         s = s.replace(/_(.+?)_/g, '<em>$1</em>');
-        // Links [text](url) — rel="noopener" prevents the opened page from
-        // accessing window.opener (security best practice for target="_blank").
+        // Links [text](url)
         s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
           '<a href="$2" target="_blank" rel="noopener">$1</a>');
         return s;
@@ -1446,11 +1186,7 @@
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
-        // ── Fenced code blocks `` ` ` ` `` ──────────────────────────────────
-        // A line starting with ``` toggles the fenced-block state.
-        // While inFence, lines are accumulated raw into fenceBuffer (not parsed)
-        // so that Markdown syntax inside a code block is treated as literal text.
-        // When the closing ``` is found, fenceBuffer is escaped and wrapped.
+        // Fenced code blocks ```
         if (line.trimStart().startsWith('```')) {
           if (!inFence) {
             flushList();
@@ -1467,16 +1203,12 @@
         }
         if (inFence) { fenceBuffer.push(line); continue; }
 
-        // ── Horizontal rule ──────────────────────────────────────────────────
-        // Three or more *, -, or _ on a line by themselves (possibly with spaces).
+        // HR
         if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line)) {
           flushList(); out.push('<hr>'); continue;
         }
 
-        // ── Headings h1–h3 ──────────────────────────────────────────────────
-        // Supports ATX-style headings (# H1, ## H2, ### H3).
-        // We cap at h3 — deeper nesting is unusual in scratchpad notes and
-        // would require more regex complexity for minimal gain.
+        // Headings
         const hMatch = line.match(/^(#{1,3})\s+(.*)/);
         if (hMatch) {
           flushList();
@@ -1485,19 +1217,14 @@
           continue;
         }
 
-        // ── Blockquote ───────────────────────────────────────────────────────
-        // Note: esc() is applied to line.slice(2) before inlineFormat() so that
-        // any < / > in the quoted text are escaped BEFORE the inline regex runs.
+        // Blockquote
         if (line.startsWith('> ')) {
           flushList();
           out.push(`<blockquote>${inlineFormat(esc(line.slice(2)))}</blockquote>`);
           continue;
         }
 
-        // ── Unordered list ───────────────────────────────────────────────────
-        // -, *, or + followed by a space starts/continues a <ul>.
-        // Switching from ordered to unordered (or vice versa) closes the
-        // previous list tag before opening the new one.
+        // Unordered list
         const ulMatch = line.match(/^[-*+]\s+(.*)/);
         if (ulMatch) {
           if (!inUl) { if (inOl) { out.push('</ol>'); inOl = false; } out.push('<ul>'); inUl = true; }
@@ -1505,8 +1232,7 @@
           continue;
         }
 
-        // ── Ordered list ─────────────────────────────────────────────────────
-        // Any digit(s) followed by a period and space: "1. " "42. " etc.
+        // Ordered list
         const olMatch = line.match(/^\d+\.\s+(.*)/);
         if (olMatch) {
           if (!inOl) { if (inUl) { out.push('</ul>'); inUl = false; } out.push('<ol>'); inOl = true; }
@@ -1514,18 +1240,15 @@
           continue;
         }
 
-        // A non-list line closes any open list.
         flushList();
 
-        // Empty line → paragraph break (visual whitespace).
-        // We emit <br> rather than </p><p> to keep the DOM simple.
+        // Empty line → paragraph break
         if (line.trim() === '') { out.push('<br>'); continue; }
 
-        // Regular paragraph line — apply inline formatting and wrap.
+        // Regular paragraph line
         out.push(`<p>${inlineFormat(line)}</p>`);
       }
 
-      // Flush an unterminated fenced block at end-of-input (user forgot closing ```).
       if (inFence && fenceBuffer.length) {
         out.push(`<pre><code>${fenceBuffer.map(esc).join('\n')}</code></pre>`);
       }
@@ -1535,28 +1258,20 @@
     }
 
     function renderMarkdown() {
-      // Directly assigns to innerHTML — safe only because parseMarkdown() has
-      // already escaped all user-controlled text through esc().
       mdPreview.innerHTML = parseMarkdown(editor.value);
     }
 
     function setMdMode(on) {
       mdMode = on;
       localStorage.setItem(KEY_MD_MODE, String(on));
-      // Keep both the footer button and the prefs toggle in sync —
-      // either can initiate a mode change, so both must reflect the new state.
       toggleMarkdown.checked = on;
       btnMd.classList.toggle('active', on);
 
       if (on) {
-        // Render the current text before hiding the textarea — the preview div
-        // must be populated before it becomes visible to avoid a blank flash.
         renderMarkdown();
         editor.style.display = 'none';
         mdPreview.style.display = 'block';
       } else {
-        // Restore the textarea and give it focus so the user can keep typing
-        // without having to click.  The empty string resets to the CSS default.
         editor.style.display = '';
         mdPreview.style.display = 'none';
         focusEditor();
@@ -1571,54 +1286,41 @@
     // FEATURE 6: Plain-text export (copy all to clipboard)
     // ════════════════════════════════════════════════════════════════════════
     //
-    // WHY navigator.clipboard.writeText and not document.execCommand('copy')?
-    //   document.execCommand('copy') is deprecated (removed from the spec in
-    //   2020), requires the element to be selected/focused, and behaves
-    //   inconsistently across browser engines.  navigator.clipboard is the
-    //   modern, promise-based Clipboard API.  It requires a "secure context"
-    //   (HTTPS, localhost, or — crucially — Tauri's custom asset protocol,
-    //   which WebViews treat as secure).  Since Junk only ever runs inside
-    //   Tauri, we are always in a secure context, so writeText is always safe.
+    // Copies the raw textarea content to the clipboard.
+    // Works from both the footer copy button and the prefs panel export button.
     //
-    // Two buttons can trigger the copy:
-    //   • btnCopy   — footer icon button (SVG icon, uses checkmark swap feedback)
-    //   • btnExport — prefs panel text button (text label, uses 'Copied!' swap)
-    // sourceBtn is passed in so the feedback can be tailored to the button type.
+    // WHY navigator.clipboard.writeText and not document.execCommand('copy')?
+    //   execCommand is deprecated and unreliable. navigator.clipboard is the
+    //   modern async API. It requires a secure context (HTTPS or localhost) —
+    //   Tauri's custom-protocol satisfies this requirement.
 
     async function copyAllToClipboard(sourceBtn) {
       const text = editor.value;
-      // Bail silently if there is nothing to copy — avoids an empty clipboard write.
       if (!text) return;
 
       try {
         await navigator.clipboard.writeText(text);
 
-        // ── Visual feedback ───────────────────────────────────────────────────
-        // Preserve the original HTML (SVG or text) so we can restore it after
-        // the brief feedback window.
+        // Feedback: preserve original innerHTML (may be SVG icon or text)
         const origHTML = sourceBtn.innerHTML;
         const origTitle = sourceBtn.title;
-        // Icon buttons (.icon-btn) get a checkmark SVG; text buttons get 'Copied!'.
         const isSvgBtn = sourceBtn.classList.contains('icon-btn');
 
         if (isSvgBtn) {
-          // For icon buttons: swap SVG for a checkmark icon + show save-status.
+          // For icon buttons: swap SVG for a checkmark icon + show save-status
           sourceBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
           sourceBtn.title = 'Saved!';
-          // Also flash the save-status label in the footer — same reflow trick
-          // as saveContent(): remove class → force reflow → re-add class.
+          // Also flash the save-status label
           saveStatus.textContent = 'copied';
           saveStatus.classList.remove('saving');
           void saveStatus.offsetWidth;
           saveStatus.classList.add('saving');
         } else {
-          // For text buttons (prefs export): swap text label.
+          // For text buttons (prefs export): swap text
           sourceBtn.textContent = 'Copied!';
           sourceBtn.classList.add('copied');
         }
 
-        // Restore original content after 1.6 s — long enough to read, short
-        // enough not to feel "stuck".
         setTimeout(() => {
           sourceBtn.innerHTML = origHTML;
           sourceBtn.title = origTitle;
@@ -1630,24 +1332,16 @@
     }
 
     // ── Preferences panel ────────────────────────────────────────────────────
-    //
-    // The prefs panel slides in over the editor.  Opening it fetches live data
-    // from Rust (launch-at-login state, current version) via Promise.allSettled —
-    // allSettled is used (rather than Promise.all) so a failure in one IPC call
-    // doesn't prevent the other from completing or the panel from opening.
     let prefsOpen = false;
 
     async function openPrefs() {
       if (prefsOpen) return;
       prefsOpen = true;
       windowEl.classList.add('prefs-open');
-      // Load live state in parallel; failures are swallowed — the panel still opens.
       await Promise.allSettled([
         loadLaunchAtLogin(),
         loadVersionDisplay(),
       ]);
-      // auto-update preference lives in localStorage, not in Rust.
-      // Default to true ('false' must be explicitly set to disable).
       const autoUpdate = localStorage.getItem(KEY_AUTO_UPDATE);
       toggleAutoUpdate.checked = autoUpdate !== 'false';
       setUpdateStatus('', '');
@@ -1659,12 +1353,7 @@
       windowEl.classList.remove('prefs-open');
     }
 
-    // ── Launch at login ───────────────────────────────────────────────────────
-    //
-    // "Launch at login" is an OS-level registration (Login Items on macOS,
-    // Run key in HKCU on Windows).  Only Rust can read/write it via
-    // tauri-plugin-autostart.  JS stores no local copy — it always asks Rust for
-    // the authoritative state when the prefs panel opens.
+    // ── Launch at login ──────────────────────────────────────────────────────
     async function loadLaunchAtLogin() {
       try {
         const prefs = await ipc('get_prefs');
@@ -1681,19 +1370,12 @@
       try {
         await ipc('set_launch_at_login', { enabled });
       } catch (err) {
-        // Roll back the checkbox if the IPC call fails — the toggle must reflect
-        // the actual OS state, not an optimistic UI update.
         toggleLaunch.checked = !enabled;
         console.error('[prefs] set_launch_at_login failed:', err);
       }
     }
 
     // ── Version display ──────────────────────────────────────────────────────
-    //
-    // We reuse the check_for_update command (which queries the GitHub Releases API)
-    // just to get the current bundle version.  This avoids needing a separate IPC
-    // command for something so cheap, and also serves as an implicit connectivity
-    // probe when the panel opens.
     async function loadVersionDisplay() {
       try {
         const result = await ipc('check_for_update');
@@ -1704,10 +1386,6 @@
     }
 
     // ── Update check ─────────────────────────────────────────────────────────
-    //
-    // setUpdateStatus manages the status element's text and CSS class atomically:
-    // clear both first, then set, to prevent stale state from a previous call
-    // from bleeding through.
     function setUpdateStatus(msg, cls) {
       updateStatus.textContent = '';
       updateStatus.className = '';
@@ -1715,13 +1393,6 @@
       if (cls) updateStatus.classList.add(cls);
     }
 
-    // checkForUpdate fetches the GitHub Releases API via Rust (Rust makes the
-    // HTTP request to avoid CORS issues that would arise from JS fetch() against
-    // the GitHub API without proper CORS headers on the custom protocol).
-    //
-    // silent: true — used by the automatic startup check; shows no feedback if
-    // the user is up to date, and never shows loading text.
-    // silent: false — used by the manual "Check now" button; shows all states.
     async function checkForUpdate({ silent = false } = {}) {
       checkUpdateBtn.disabled = true;
       if (!silent) setUpdateStatus('Checking…', '');
@@ -1732,8 +1403,6 @@
         if (result.up_to_date) {
           setUpdateStatus(`You're up to date (${result.current})`, 'up-to-date');
         } else {
-          // Create the download link dynamically so the URL comes from Rust
-          // (server-side) rather than being hardcoded in JS.
           updateStatus.className = 'update-available';
           const link = document.createElement('a');
           link.href = result.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
@@ -1744,101 +1413,32 @@
       } catch {
         setUpdateStatus('Could not check — are you online?', 'update-error');
       } finally {
-        // Re-enable even if an error occurred — the user should be able to retry.
         checkUpdateBtn.disabled = false;
       }
     }
 
-    // Delay the auto-check by 2 s after startup so it doesn't compete with the
-    // window's initial render and geometry-restore IPC calls.  The delay also
-    // means a user who immediately hides the window (< 2 s) never triggers a
-    // network request at all.
     function maybeAutoCheckOnStartup() {
       if (localStorage.getItem(KEY_AUTO_UPDATE) === 'false') return;
       setTimeout(() => checkForUpdate({ silent: true }).catch(() => {}), 2000);
     }
 
     // ── Tauri event listeners ────────────────────────────────────────────────
-    //
-    // WHY a retry loop (setTimeout(setupTauriEvents, 100))?
-    //
-    //   window.__TAURI__.event.listen is the only way to subscribe to Tauri
-    //   window events like tauri://focus.  Unlike __TAURI_INTERNALS__.invoke,
-    //   this object path requires withGlobalTauri: true AND is populated by a
-    //   separate JS bundle that Tauri injects asynchronously.  On some machines,
-    //   the injection hasn't completed by the time this <script type="module">
-    //   first runs (modules are deferred but the Tauri init bundle may be even
-    //   later).
-    //
-    //   The retry loop polls every 100 ms until __TAURI__.event.listen exists,
-    //   then wires the listeners exactly once.  100 ms is fast enough to not
-    //   miss the first focus event on a slow machine, and cheap enough to not
-    //   matter if it fires 2–3 times before succeeding.
-    //
-    // Events we listen to:
-    //   tauri://focus — fired every time the Tauri window becomes the frontmost
-    //                   window (shown via tray click, hotkey, etc.).
-    //                   Used to: replay the fly-in animation, restore window
-    //                   position (in case display geometry changed), and focus
-    //                   the editor.
-    //   open-prefs    — custom event emitted by the Rust tray menu "Preferences"
-    //                   item.  Opens the prefs panel from outside the WebView.
     function setupTauriEvents() {
       const listenFn = window.__TAURI__?.event?.listen ?? null;
       if (!listenFn) {
-        // Not ready yet — retry in 100 ms.  This is intentionally lightweight:
-        // no exponential back-off, no abort signal.  The app would be broken
-        // anyway if this kept failing forever (Tauri isn't injecting globals).
         setTimeout(setupTauriEvents, 100);
         return;
       }
       listenFn('tauri://focus', async () => {
         triggerFlyIn();
-        // Restore geometry in case the user moved the window on another monitor
-        // session and we need to re-land it correctly.
         await restoreWindowPosition();
-        // 20 ms delay: give the window's show animation time to start before
-        // requesting focus — avoids a race condition where focus() fires before
-        // the WebView is fully composited.
         setTimeout(focusEditor, 20);
       });
       listenFn('open-prefs', () => openPrefs());
     }
 
     // ── Window drag + position save ──────────────────────────────────────────
-    //
-    // Tauri windows can be dragged by clicking anywhere that isn't an interactive
-    // element.  We implement this with startDragging() over IPC, which tells the
-    // OS window manager to take over mouse tracking for the drag operation.
-    //
-    // WHY an IIFE (immediately-invoked function expression)?
-    //   The INTERACTIVE selector and event handlers are only needed here; wrapping
-    //   them in an IIFE keeps them out of the module's outer scope and makes it
-    //   clear this is a self-contained setup block, not a reusable function.
-    //
-    // WHY e.preventDefault() before ipc('start_dragging')?
-    //   Without it, a mousedown on certain elements (notably <p> text) would
-    //   trigger text selection.  The OS drag then competes with a browser
-    //   selection drag, causing a jittery movement and a stale text selection
-    //   artifact after the drag ends.  Calling preventDefault() cancels the
-    //   browser's own mousedown handling before we hand off to the OS.
-    //
-    // WHY setTimeout(saveWindowPosition, 80) instead of saving immediately in mouseup?
-    //   When the OS drag ends (mouseup), the window's final position may not yet
-    //   be reported by Tauri's get_window_position() — the OS compositor can lag
-    //   a frame or two behind.  The 80 ms delay lets the OS settle before we read
-    //   the final coordinates.  80 ms is imperceptible to the user but sufficient
-    //   for every platform we've tested (macOS, Windows 11).
-    //
-    // CURSOR MANAGEMENT:
-    //   We show a 'grab' cursor over draggable regions and restore the default
-    //   cursor when hovering interactive elements.  This gives visual affordance
-    //   for the drag behaviour without any CSS-only approach (which would require
-    //   knowing the full interactive element list at CSS-authoring time).
     (function registerDragListener() {
-      // INTERACTIVE lists every element type that should NOT initiate a drag.
-      // Clicking these should pass through to their default behaviour (typing,
-      // clicking, toggling) — not trigger a window move.
       const INTERACTIVE = [
         'textarea','input','button','select','a','label',
         '[contenteditable]','.prefs-panel','.editor-dim',
@@ -1847,36 +1447,26 @@
       if (!windowEl) return;
 
       windowEl.addEventListener('mousedown', (e) => {
-        // Only respond to the primary (left) mouse button.
         if (e.button !== 0) return;
-        // Walk up the DOM from the click target to #window, checking at each
-        // level whether we've entered an interactive element.  If so, bail out
-        // and let the event proceed normally.
         let node = e.target;
         while (node && node !== windowEl) {
           if (node.matches?.(INTERACTIVE)) return;
           node = node.parentElement;
         }
         isDragging = true;
-        // Cancel text-selection and other default mousedown behaviours BEFORE
-        // handing off to the OS — order matters (see comment above).
         e.preventDefault();
         ipc('start_dragging').catch(err => console.warn('[drag]', err));
       });
 
-      // Save position after drag ends.
-      // We listen on window (not windowEl) so the mouseup is caught even if the
-      // pointer has wandered off the app window during a fast drag.
+      // Save position after drag ends
       window.addEventListener('mouseup', () => {
         if (isDragging) {
           isDragging = false;
-          // Small delay — let the OS finish moving before we read position.
-          // See comment block above for the 80 ms rationale.
+          // Small delay — let the OS finish moving before we read position
           setTimeout(saveWindowPosition, 80);
         }
       });
 
-      // Cursor affordance: show 'grab' over draggable areas, default elsewhere.
       windowEl.addEventListener('mousemove', (e) => {
         let node = e.target;
         while (node && node !== windowEl) {
@@ -1889,15 +1479,7 @@
       windowEl.addEventListener('mouseleave', () => { windowEl.style.cursor = ''; });
     })();
 
-    // Save size whenever the window is resized.
-    //
-    // WHY a 300 ms debounce here?
-    //   The 'resize' event fires continuously during a drag-resize, potentially
-    //   dozens of times per second.  Each saveWindowGeometry() call makes two IPC
-    //   round-trips (get_window_position + get_window_size) and two localStorage
-    //   writes.  Debouncing to 300 ms means we only do this work once per resize
-    //   gesture, after the user has released the resize handle.  Same interval as
-    //   scheduleSave() for consistency.
+    // Save size whenever the window is resized
     let resizeSaveTimer = null;
     window.addEventListener('resize', () => {
       clearTimeout(resizeSaveTimer);
@@ -1905,17 +1487,8 @@
     });
 
     // ── Keyboard shortcuts ───────────────────────────────────────────────────
-    //
-    // Global keydown handler for in-app shortcuts.  We check hotkeyCapturing
-    // first and bail immediately — when the user is pressing a key to set a new
-    // hotkey, we must not intercept it here and accidentally trigger Escape/⌘,/etc.
-    //
-    // Shortcuts:
-    //   Escape    — close prefs if open, else hide the window entirely.
-    //   ⌘, / Ctrl+,  — toggle prefs panel (standard macOS/Windows convention).
-    //   ⌘M / Ctrl+M  — toggle Markdown preview.
     document.addEventListener('keydown', (e) => {
-      // Don't intercept while capturing a new hotkey.
+      // Don't intercept while capturing a new hotkey
       if (hotkeyCapturing) return;
 
       if (e.key === 'Escape') {
@@ -1928,7 +1501,7 @@
         if (prefsOpen) closePrefs(); else openPrefs();
         return;
       }
-      // ⌘M / Ctrl+M — toggle Markdown preview.
+      // ⌘M / Ctrl+M — toggle Markdown preview
       if (e.key === 'm' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setMdMode(!mdMode);
@@ -1937,76 +1510,37 @@
     });
 
     // ── Paste handler ────────────────────────────────────────────────────────
-    //
-    // WHY intercept paste at the document level rather than on #editor directly?
-    //   The editor loses focus when the prefs panel is open (the panel overlaps it).
-    //   If a user pastes while prefs is open we want to do nothing (guarded by
-    //   `prefsOpen`).  But we also want to handle paste when the editor DOES have
-    //   focus but the user hasn't clicked it yet — e.g. right after the window
-    //   appears from the tray.  Document-level capture ensures we never miss a
-    //   paste regardless of which element technically has focus.
-    //
-    // The handler manually inserts text at the current cursor position (preserving
-    // any active selection) rather than letting the browser's default paste do it,
-    // because the default paste only works when the textarea itself has focus.
-    // Here we want paste-to-editor even when another element (e.g. the window
-    // root) is the active element.
-    //
-    // After the manual insert we call scheduleSave() to debounce-persist the
-    // new content, consistent with how normal typing triggers saves.
     document.addEventListener('paste', (e) => {
-      // If the editor already has focus, let the browser handle the paste natively.
-      // If prefs is open, ignore entirely (don't paste into a hidden textarea).
-      // If MD preview is active, textarea is hidden — don't silently modify it.
       if (document.activeElement === editor || prefsOpen || mdMode) return;
       e.preventDefault();
       const text = e.clipboardData?.getData('text/plain') ?? '';
       if (!text) return;
-      // Insert at cursor, replacing any selection (start..end).
       const start = editor.selectionStart ?? editor.value.length;
       const end   = editor.selectionEnd   ?? editor.value.length;
       editor.value = editor.value.slice(0, start) + text + editor.value.slice(end);
-      // Position cursor after the pasted text.
       const newPos = start + text.length;
       editor.setSelectionRange(newPos, newPos);
       scheduleSave();
     });
 
     // ── Event wiring ─────────────────────────────────────────────────────────
-    //
-    // All event listeners that don't belong to a specific feature block are wired
-    // here in one place.  This makes it easy to see the complete set of UI
-    // interactions at a glance without hunting through feature sections.
-
-    // Every keystroke in the editor schedules a debounced save AND updates the
-    // live MD preview if it's visible.  The preview re-render inside renderMarkdown()
-    // is cheap (~1 ms for typical note lengths) so no throttle is needed there.
     editor.addEventListener('input', () => {
       scheduleSave();
       if (mdMode) renderMarkdown();
     });
 
-    // Footer gear icon → toggle prefs panel.
     footerPrefsBtn.addEventListener('click', () => {
       if (prefsOpen) closePrefs(); else openPrefs();
     });
 
-    // Clicking the dim overlay behind the prefs panel closes it — standard
-    // modal-dismiss UX pattern.
     editorDim.addEventListener('click', closePrefs);
     prefsCloseBtn.addEventListener('click', closePrefs);
-
-    // Launch-at-login toggle fires onLaunchAtLoginChange which makes an IPC call.
     toggleLaunch.addEventListener('change', onLaunchAtLoginChange);
 
-    // Auto-update toggle only writes to localStorage — no IPC needed.
-    // maybeAutoCheckOnStartup() reads this value on the next launch.
     toggleAutoUpdate.addEventListener('change', () => {
       localStorage.setItem(KEY_AUTO_UPDATE, String(toggleAutoUpdate.checked));
     });
 
-    // Two controls for the same boolean: the prefs toggle and the footer ⌘M button.
-    // Both call setMdMode() which is the single source of truth for MD state.
     toggleMarkdown.addEventListener('change', () => setMdMode(toggleMarkdown.checked));
 
     btnMd.addEventListener('click', () => setMdMode(!mdMode));
@@ -2015,40 +1549,6 @@
     checkUpdateBtn.addEventListener('click', () => checkForUpdate({ silent: false }));
 
     // ── Startup sequence ─────────────────────────────────────────────────────
-    //
-    // ORDER IS IMPORTANT — each call is positioned for a reason:
-    //
-    //   loadContent()     — Must be first.  Populates the textarea with saved text
-    //                       before anything else paints, avoiding a "blank flash".
-    //
-    //   loadFontSize()    — Early: the CSS var must be set before layout calculates
-    //                       element dimensions, or the textarea height may be wrong.
-    //
-    //   loadTheme()       — Early: data-theme must be set before paint to prevent
-    //                       a light-to-dark flash (FOUT equivalent for themes).
-    //
-    //   loadMdMode()      — After content: needs editor.value to render the preview.
-    //                       Before any IPC: pure localStorage, no async needed.
-    //
-    //   initHotkeyDisplay() — Pure UI, no IPC.  Fine anywhere before first paint.
-    //
-    //   setupTauriEvents()  — Starts the retry loop for __TAURI__.event.listen.
-    //                         Must run early enough that the loop finishes before
-    //                         the first tauri://focus event, which can fire within
-    //                         milliseconds on a fast machine.
-    //
-    //   maybeAutoCheckOnStartup() — Delayed 2 s internally; non-blocking.  Placed
-    //                         here so the delay starts counting from page load, not
-    //                         from the bottom of an async chain.
-    //
-    //   restoreWindowPosition() — IPC call; awaited implicitly (fire-and-forget is
-    //                         intentional — a failure just means the window stays
-    //                         where Tauri placed it by default).
-    //
-    //   restoreHotkey()   — MUST be last.  It makes an IPC call that can fail
-    //                       silently (key conflict).  Placing it last ensures all
-    //                       synchronous UI initialisation has already completed;
-    //                       a slow Rust response cannot delay content display.
     loadContent();
     loadFontSize();
     loadTheme();
@@ -2058,10 +1558,10 @@
     maybeAutoCheckOnStartup();
     restoreWindowPosition();
 
-    // Restore custom hotkey (re-registers in Rust if user had changed it).
+    // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.0.4 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.0.8 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>
