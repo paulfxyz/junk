@@ -4,6 +4,17 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.0.5] — 2026-06-06
+
+### Footer drag handle restored
+
+#### Fixed
+- Dragging the window from the bottom bar works again. The footer's empty centre zone now has a dedicated invisible drag handle (`div.footer-drag-handle`) with `position: absolute` spanning the full footer height. Clicking it falls through to the `#window` `mousedown` listener which calls `start_dragging()` IPC.
+- Added subtle grip-dot indicator in the footer centre so the draggable area is visually discoverable.
+- `.footer` gets `position: relative` so the absolute handle is contained correctly.
+
+---
+
 ## [3.0.4] — 2026-06-04
 
 ### macOS Native Window Shadow

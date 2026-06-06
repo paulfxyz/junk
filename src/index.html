@@ -247,10 +247,31 @@
       border-top: 1px solid var(--footer-border);
       transition: background 0.2s, border-color 0.2s;
       flex-shrink: 0;
+      position: relative; /* needed for absolute footer-drag-handle */
     }
 
     .footer-left, .footer-right {
       display: flex; align-items: center; gap: 2px;
+    }
+
+    /* Invisible drag handle spanning the footer's empty centre zone.          */
+    /* position:absolute lets it fill the full footer height without pushing   */
+    /* buttons around; pointer-events:none on buttons above means clicks on    */
+    /* the handle fire through to the drag listener on #window.                */
+    .footer-drag-handle {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40%;
+      top: 0; bottom: 0;
+      cursor: grab;
+      /* Subtle grip dots — lets the user know this area is draggable */
+      background-image: radial-gradient(circle, var(--text-secondary) 1px, transparent 1px);
+      background-size: 6px 6px;
+      background-position: center;
+      background-repeat: repeat-x;
+      opacity: 0.22;
+      border-radius: 4px;
     }
 
     /* ── Footer icon buttons ─────────────────────────────────────────────────── */
@@ -565,6 +586,10 @@
 
     <!-- Footer bar -->
     <footer class="footer" id="footer">
+      <!-- Drag handle: covers the empty centre of the footer bar so the user
+           can drag the window from the bottom bar. Pointer events fall through
+           to the #window mousedown → start_dragging() IPC call. -->
+      <div class="footer-drag-handle" aria-hidden="true"></div>
       <div class="footer-left">
         <!-- Markdown toggle -->
         <button class="icon-btn" id="btn-md" title="Toggle Markdown preview (⌘M)">
