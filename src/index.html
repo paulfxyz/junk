@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.0.9)
+  Junk — frontend (v3.1.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Features (current as of v3.0.9):
@@ -733,9 +733,9 @@
 
   <script type="module">
     // ═══════════════════════════════════════════════════════════════════════
-    // Junk — frontend script (v3.0.9)
+    // Junk — frontend script (v3.1.0)
     //
-    // Features (v3.0.9):
+    // Features (v3.1.0):
     //   1. Custom shortcut  — hotkey-key-input captures keydown, calls set_hotkey()
     //   2. Position memory  — saves outer_position after every drag, restores on show
     //   2b. Always on top   — default ON, toggle in prefs, persisted in localStorage
@@ -1490,6 +1490,11 @@
       listenFn('tauri://focus', async () => {
         triggerFlyIn();
         await restoreWindowPosition();
+        // Re-assert always-on-top on every show — macOS resets the window
+        // level when a window is hidden and re-shown via CGWindowLevel.
+        // We must call set_always_on_top() again each time the window appears.
+        const alwaysOn = localStorage.getItem(KEY_ALWAYS_TOP) !== 'false';
+        ipc('set_always_on_top', { always_on_top: alwaysOn }).catch(() => {});
         setTimeout(focusEditor, 20);
       });
       listenFn('open-prefs', () => openPrefs());
@@ -1621,7 +1626,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.0.9 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.0 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

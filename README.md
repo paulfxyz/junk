@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-3.0.9-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-3.1.0-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -86,7 +86,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_3.0.9_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.0_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -104,7 +104,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_3.0.9_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.0_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -115,7 +115,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_3.0.9_x64_en-US.msi /quiet
+msiexec /i Junk_3.1.0_x64_en-US.msi /quiet
 ```
 
 ---
@@ -123,9 +123,9 @@ msiexec /i Junk_3.0.9_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.9_amd64.AppImage
-chmod +x Junk_3.0.9_amd64.AppImage
-./Junk_3.0.9_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.0_amd64.AppImage
+chmod +x Junk_3.1.0_amd64.AppImage
+./Junk_3.1.0_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -137,8 +137,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.9_amd64.deb
-sudo dpkg -i Junk_3.0.9_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.0_amd64.deb
+sudo dpkg -i Junk_3.1.0_amd64.deb
 junk
 ```
 
@@ -1656,9 +1656,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_3.0.9_universal.dmg` |
-| Windows | `Junk_3.0.9_x64-setup.exe` + `Junk_3.0.9_x64_en-US.msi` |
-| Ubuntu | `Junk_3.0.9_amd64.AppImage` + `Junk_3.0.9_amd64.deb` |
+| macOS | `Junk_3.1.0_universal.dmg` |
+| Windows | `Junk_3.1.0_x64-setup.exe` + `Junk_3.1.0_x64_en-US.msi` |
+| Ubuntu | `Junk_3.1.0_amd64.AppImage` + `Junk_3.1.0_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with a git log changelog.
 
@@ -1745,11 +1745,11 @@ See the "macOS rounded corners: the full investigation" section in Architecture 
 
 ## Changelog
 
-### v3.0.9 — 2026-06-06
+### v3.1.0 — 2026-06-06
 
 Always on top restored; preferences toggleable; version label fix; confirmed position/font/theme memory.
 
-- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.0.9 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
+- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.1.0 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
 - **Version label fix** — The version display in the Preferences panel footer was hardcoded to `v3.0.4`. Now set to the correct version; `loadVersionDisplay()` overwrites it with the live version from `check_for_update()` IPC.
 - **Window position memory** — confirmed fully wired: `saveWindowGeometry()` called after every drag (`mouseup`, 80 ms delay) and after every resize (300 ms debounce). `restoreWindowGeometry()` called on startup and on every `tauri://focus` event.
 - **Font size memory** — confirmed: `loadFontSize()` on startup reads `localStorage['junk-font-size']`, falls back to 22 px. Slider `input` event saves immediately.

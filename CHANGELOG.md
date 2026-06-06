@@ -4,6 +4,32 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.0] — 2026-06-06
+
+### Fix: always-on-top now actually stays on top on macOS
+
+#### Fixed
+- **macOS window level reset on hide/show** — When Junk is hidden (Esc) and
+  re-summoned (⌘J), macOS resets the CGWindowLevel of the window. The v3.0.9
+  implementation called `set_always_on_top()` once at startup, which was
+  correct for the initial show but lost on every subsequent toggle. The fix:
+  re-assert always-on-top on every `tauri://focus` event (fired each time the
+  window is shown), reading the user’s persisted preference from localStorage.
+- **`alwaysOnTop: true` in tauri.conf.json** — Restoring the original default
+  so the window is on top from the very first frame before JS runs. This is a
+  belt-and-suspenders fix: JS re-asserts on focus, config sets the initial
+  level. Both together are robust on macOS.
+
+#### Root cause
+`tauri.conf.json` `alwaysOnTop` sets the initial CGWindowLevel once. Tauri’s
+`window.set_always_on_top()` call in Rust uses `NSWindow.setLevel()` which
+survives for the lifetime of the window process — but on macOS, hiding a
+window (`orderOut`) and re-showing it (`makeKeyAndOrderFront`) can cause the
+window manager to re-evaluate window levels and reset non-standard levels to
+normal. Solution: re-call `set_always_on_top()` on every show.
+
+---
+
 ## [3.0.9] — 2026-06-06
 
 ### Restore always-on-top; position/font/theme memory confirmed; fix version label
