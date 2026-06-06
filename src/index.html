@@ -272,6 +272,11 @@
       background-repeat: repeat-x;
       opacity: 0.22;
       border-radius: 4px;
+      /* CRITICAL: pass all clicks through to elements underneath (buttons etc).
+         The drag fires via the #window mousedown listener which catches
+         bubbled events — pointer-events:none here does NOT prevent dragging
+         because the event still bubbles up through footer → #window. */
+      pointer-events: none;
     }
 
     /* ── Footer icon buttons ─────────────────────────────────────────────────── */

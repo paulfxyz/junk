@@ -4,6 +4,20 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.0.6] — 2026-06-06
+
+### Fix: footer buttons unblocked
+
+#### Fixed
+- Markdown toggle, clipboard copy, and settings buttons in the footer were
+  unresponsive because the `footer-drag-handle` div (added in v3.0.5) was
+  `position:absolute` on top of them and intercepting their clicks.
+- Fix: added `pointer-events: none` to `.footer-drag-handle`. Clicks pass
+  straight through to buttons underneath. Drag still works because mousedown
+  bubbles up through `<footer>` → `#window` where `start_dragging()` is called.
+
+---
+
 ## [3.0.5] — 2026-06-06
 
 ### Footer drag handle restored
