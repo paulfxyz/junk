@@ -4,6 +4,30 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.0.9] — 2026-06-06
+
+### Restore always-on-top; position/font/theme memory confirmed; fix version label
+
+#### Added
+- **Always on top toggle** in Preferences — Junk’s core UX (floating above all windows)
+  was inadvertently disabled during the v3.0.2 visual rework (`alwaysOnTop: false` in
+  tauri.conf). Now re-implemented as a runtime toggle: default ON, persisted in
+  localStorage, applied via `set_always_on_top()` IPC on startup and on toggle change.
+  New Rust command: `set_always_on_top(always_on_top: bool)`. New capability permission:
+  `core:window:allow-set-always-on-top`.
+
+#### Fixed
+- **Version label in Preferences** was hardcoded to `v3.0.4` — now driven by the
+  `check_for_update` IPC result and updated to `v3.0.9` as the static default.
+- **Window position memory** — confirmed fully wired: saved after every drag and resize,
+  restored on startup and on every `tauri://focus` event.
+- **Font size memory** — confirmed fully wired: slider saves to localStorage, restored
+  via CSS custom property `--font-size` on startup.
+- **Dark mode persistence** — confirmed fully wired: light/auto/dark preference saved to
+  localStorage, restored on startup, auto mode listens to `prefers-color-scheme`.
+
+---
+
 ## [3.0.8] — 2026-06-06
 
 ### Fix: restore clean index.html, resolves windowEl ReferenceError

@@ -317,6 +317,27 @@ fn set_window_size(app: AppHandle, width: u32, height: u32) -> Result<(), String
         .map_err(|e| format!("set_window_size({w},{h}) failed: {e}"))
 }
 
+/// Enable or disable the "always on top" window level.
+///
+/// Junk is a scratchpad — staying on top of other windows is its core UX.
+/// This was the default behaviour before v3.0.2 (when `alwaysOnTop: true` was
+/// set in tauri.conf.json). The aesthetic rework changed that to `false` to
+/// allow the native shadow to render correctly, but the feature itself must
+/// be available via the toggle in Preferences.
+///
+/// The JS side stores the user's preference in localStorage and calls this
+/// on startup to restore it.
+#[tauri::command]
+fn set_always_on_top(app: AppHandle, always_on_top: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    window
+        .set_always_on_top(always_on_top)
+        .map_err(|e| format!("set_always_on_top({always_on_top}) failed: {e}"))
+}
+
+
 /// Re-register the toggle shortcut to a new key combination.
 ///
 /// Called from JS when the user changes the hotkey in Preferences.
@@ -740,6 +761,7 @@ fn main() {
             set_window_position,
             get_window_size,
             set_window_size,
+            set_always_on_top,
             set_hotkey,
         ])
         // ── Window event handling ─────────────────────────────────────────────

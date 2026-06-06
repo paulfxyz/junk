@@ -666,6 +666,18 @@
             </label>
           </div>
 
+          <!-- Always on top -->
+          <div class="prefs-row">
+            <span class="prefs-row-label">
+              Always on top
+              <span class="prefs-row-hint">Keep Junk above all other windows</span>
+            </span>
+            <label class="toggle-wrap">
+              <input type="checkbox" id="toggle-always-on-top" checked />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
           <!-- Launch at login -->
           <div class="prefs-row">
             <span class="prefs-row-label">
@@ -709,7 +721,7 @@
             &nbsp;·&nbsp;
             To fully quit: Activity Monitor → Junk → quit
           </span>
-          <span id="current-version">v3.0.4</span>
+          <span id="current-version">v3.0.9</span>
         </div>
 
       </div>
@@ -769,6 +781,7 @@
     const prefsPanel      = document.getElementById('prefs-panel');
     const prefsCloseBtn   = document.getElementById('prefs-close');
     const footerPrefsBtn  = document.getElementById('footer-prefs-btn');
+    const toggleAlwaysOnTop = document.getElementById('toggle-always-on-top');
     const toggleLaunch    = document.getElementById('toggle-launch');
     const toggleAutoUpdate= document.getElementById('toggle-autoupdate');
     const toggleMarkdown  = document.getElementById('toggle-markdown');
@@ -794,6 +807,7 @@
     const KEY_HOTKEY      = 'junk-hotkey';      // e.g. 'KeyJ'
     const KEY_WIN_POS     = 'junk-win-pos';     // JSON {x,y}
     const KEY_WIN_SIZE    = 'junk-win-size';    // JSON {w,h}
+    const KEY_ALWAYS_TOP  = 'junk-always-top';  // 'true' | 'false'
 
     // ── Content persistence ──────────────────────────────────────────────────
     function loadContent() {
@@ -1022,6 +1036,39 @@
     }
 
     const restoreWindowPosition = restoreWindowGeometry;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FEATURE 2b: Always on top
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // Junk’s core UX is floating above all windows — it’s a scratchpad you
+    // summon instantly and it should stay visible. This was the original default
+    // (alwaysOnTop: true in tauri.conf.json) but was inadvertently set to false
+    // during the v3.0.2 visual rework.
+    //
+    // We restore it here: default = ON, persisted in localStorage so the user
+    // can turn it off if they prefer. Synced to Rust via set_always_on_top().
+    //
+    // WHY Rust IPC instead of just tauri.conf.json?
+    //   tauri.conf sets the initial state only. To toggle at runtime we must
+    //   call window.set_always_on_top() via Tauri IPC.
+
+    async function applyAlwaysOnTop(on) {
+      toggleAlwaysOnTop.checked = on;
+      localStorage.setItem(KEY_ALWAYS_TOP, String(on));
+      try {
+        await ipc('set_always_on_top', { always_on_top: on });
+      } catch (err) {
+        console.warn('[always-on-top] IPC failed:', err);
+      }
+    }
+
+    function loadAlwaysOnTop() {
+      // Default: true (on). Only false if user explicitly disabled it.
+      const saved = localStorage.getItem(KEY_ALWAYS_TOP);
+      const on = saved !== 'false'; // undefined/null/true all map to ON
+      applyAlwaysOnTop(on);
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // FEATURE 3: Font size preference
@@ -1535,6 +1582,7 @@
 
     editorDim.addEventListener('click', closePrefs);
     prefsCloseBtn.addEventListener('click', closePrefs);
+    toggleAlwaysOnTop.addEventListener('change', () => applyAlwaysOnTop(toggleAlwaysOnTop.checked));
     toggleLaunch.addEventListener('change', onLaunchAtLoginChange);
 
     toggleAutoUpdate.addEventListener('change', () => {
@@ -1553,6 +1601,7 @@
     loadFontSize();
     loadTheme();
     loadMdMode();
+    loadAlwaysOnTop();
     initHotkeyDisplay();
     setupTauriEvents();
     maybeAutoCheckOnStartup();
@@ -1561,7 +1610,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.0.8 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.0.9 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

@@ -9,7 +9,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-3.0.8-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-3.0.9-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -86,7 +86,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_3.0.8_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.0.9_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -104,7 +104,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_3.0.8_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.0.9_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -115,7 +115,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_3.0.8_x64_en-US.msi /quiet
+msiexec /i Junk_3.0.9_x64_en-US.msi /quiet
 ```
 
 ---
@@ -123,9 +123,9 @@ msiexec /i Junk_3.0.8_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.8_amd64.AppImage
-chmod +x Junk_3.0.8_amd64.AppImage
-./Junk_3.0.8_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.9_amd64.AppImage
+chmod +x Junk_3.0.9_amd64.AppImage
+./Junk_3.0.9_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -137,8 +137,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.8_amd64.deb
-sudo dpkg -i Junk_3.0.8_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.0.9_amd64.deb
+sudo dpkg -i Junk_3.0.9_amd64.deb
 junk
 ```
 
@@ -1611,9 +1611,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_3.0.8_universal.dmg` |
-| Windows | `Junk_3.0.8_x64-setup.exe` + `Junk_3.0.8_x64_en-US.msi` |
-| Ubuntu | `Junk_3.0.8_amd64.AppImage` + `Junk_3.0.8_amd64.deb` |
+| macOS | `Junk_3.0.9_universal.dmg` |
+| Windows | `Junk_3.0.9_x64-setup.exe` + `Junk_3.0.9_x64_en-US.msi` |
+| Ubuntu | `Junk_3.0.9_amd64.AppImage` + `Junk_3.0.9_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with a git log changelog.
 
