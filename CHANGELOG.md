@@ -4,6 +4,25 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.2] — 2026-06-20
+
+### Fix: dim on blur now works reliably on macOS
+
+#### Fixed
+- **tauri://blur does not fire on always-on-top windows on macOS** — The v3.1.1
+  implementation listened for `tauri://blur` (a WebKit-level JS event) which is
+  not dispatched reliably when the window has a raised NSWindowLevel. The window
+  never dimmed.
+- **Fix: emit from Rust via `WindowEvent::Focused`** — Added a `RunEvent::
+  WindowEvent { Focused }` arm in `main.rs`. When `focused == false`, Rust emits
+  a custom `junk://blur` event to the WebView; when `focused == true` it emits
+  `junk://focus-change`. These map directly to `NSWindowDelegate`’s
+  `windowDidResignKey` / `windowDidBecomeKey` and fire unconditionally regardless
+  of window level.
+- **Opacity changed from 70% to 50%** — per user preference.
+
+---
+
 ## [3.1.1] — 2026-06-20
 
 ### Dim when unfocused

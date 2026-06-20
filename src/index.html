@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.1.1)
+  Junk — frontend (v3.1.2)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Features (current as of v3.0.9):
@@ -145,7 +145,7 @@
        Only active when 'Dim when unfocused' preference is ON.
        Fade out: 0.18s. Fade back in: same, feels snappy on re-focus. */
     .window--blurred {
-      opacity: 0.7;
+      opacity: 0.5;
     }
 
     @keyframes fly-in {
@@ -690,7 +690,7 @@
           <div class="prefs-row">
             <span class="prefs-row-label">
               Dim when unfocused
-              <span class="prefs-row-hint">Fade to 70% opacity when you switch to another app</span>
+              <span class="prefs-row-hint">Fade to 50% opacity when you switch to another app</span>
             </span>
             <label class="toggle-wrap">
               <input type="checkbox" id="toggle-dim-blur" checked />
@@ -752,9 +752,9 @@
 
   <script type="module">
     // ═══════════════════════════════════════════════════════════════════════
-    // Junk — frontend script (v3.1.1)
+    // Junk — frontend script (v3.1.2)
     //
-    // Features (v3.1.1):
+    // Features (v3.1.2):
     //   1. Custom shortcut  — hotkey-key-input captures keydown, calls set_hotkey()
     //   2. Position memory  — saves outer_position after every drag, restores on show
     //   2b. Always on top   — default ON, toggle in prefs, persisted in localStorage
@@ -1111,11 +1111,17 @@
     // defined in CSS on .window so both directions animate smoothly.
     //
     // Implementation:
-    //   - tauri://blur  → add    .window--blurred  (if pref is ON)
-    //   - tauri://focus → remove .window--blurred  (always, regardless of pref)
+    //   - junk://blur         → add    .window--blurred  (if pref is ON)
+    //   - junk://focus-change → remove .window--blurred  (always)
     //
-    // The class is always cleared on focus so toggling the pref OFF while
-    // the window is blurred doesn't leave it stuck at 70%.
+    // WHY junk://blur instead of tauri://blur?
+    //   tauri://blur is a WebKit-level event and does not fire reliably on
+    //   macOS for always-on-top windows. We emit junk://blur from Rust via
+    //   WindowEvent::Focused(false) → NSWindowDelegate windowDidResignKey,
+    //   which fires unconditionally regardless of window level.
+    //
+    // The class is always cleared on focus-change so toggling the pref OFF
+    // while blurred doesn't leave it stuck at 50%.
 
     function applyDimBlur(on) {
       toggleDimBlur.checked = on;
@@ -1549,11 +1555,18 @@
         setTimeout(focusEditor, 20);
       });
 
-      listenFn('tauri://blur', () => {
-        // Dim the window when user switches to another app.
-        // Only if the pref is ON (default: true).
+      // junk://blur fires from Rust WindowEvent::Focused(false) — reliable
+      // on macOS even for always-on-top windows (unlike tauri://blur).
+      listenFn('junk://blur', () => {
         const dimOn = localStorage.getItem(KEY_DIM_BLUR) !== 'false';
         if (dimOn) windowEl.classList.add('window--blurred');
+      });
+
+      // junk://focus-change fires from Rust WindowEvent::Focused(true).
+      // Separate from tauri://focus (show/restore) — this handles switching
+      // back from another app while the window is already visible.
+      listenFn('junk://focus-change', () => {
+        windowEl.classList.remove('window--blurred');
       });
       listenFn('open-prefs', () => openPrefs());
     }
@@ -1686,7 +1699,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.1 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.2 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

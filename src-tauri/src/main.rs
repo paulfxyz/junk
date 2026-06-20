@@ -810,6 +810,35 @@ fn main() {
                 }
             }
 
+            // Focus change → emit custom events to JS for dim-on-blur.
+            //
+            // WHY custom events instead of tauri://blur / tauri://focus?
+            //   On macOS, always-on-top windows (NSWindowLevel above normal)
+            //   do not always receive the standard WebKit blur/focus events
+            //   when the user switches to another app. Tauri’s Rust-side
+            //   WindowEvent::Focused fires reliably regardless of window level
+            //   because it maps directly to NSWindowDelegate
+            //   windowDidBecomeKey / windowDidResignKey.
+            //
+            // We emit 'junk://blur' (focused=false) and 'junk://focus-change'
+            // (focused=true). JS listens for these instead of 'tauri://blur'.
+            // Note: 'junk://focus-change' is separate from 'tauri://focus'
+            //   (which fires on show). Both are needed: tauri://focus handles
+            //   the show/restore flow; junk://focus-change handles the
+            //   dim-restore when switching back from another app.
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Focused(focused),
+                ..
+            } if label == "main" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let event_name = if *focused { "junk://focus-change" } else { "junk://blur" };
+                    if let Err(e) = window.emit(event_name, ()) {
+                        log::warn!("Failed to emit {event_name}: {e}");
+                    }
+                }
+            }
+
             // ⌘Q → quit for real.
             RunEvent::ExitRequested { .. } => {
                 log::info!("ExitRequested (⌘Q) — shutting down.");
