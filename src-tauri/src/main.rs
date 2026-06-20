@@ -832,7 +832,7 @@ fn main() {
                 ..
             } if label == "main" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let event_name = if *focused { "junk://focus-change" } else { "junk://blur" };
+                    let event_name = if focused { "junk://focus-change" } else { "junk://blur" };
                     if let Err(e) = window.emit(event_name, ()) {
                         log::warn!("Failed to emit {event_name}: {e}");
                     }
