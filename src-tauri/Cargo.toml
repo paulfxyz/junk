@@ -116,3 +116,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Foundation",
 ] }
+# raw-window-handle is used to extract the HWND from the Tauri WebviewWindow.
+# It is also declared under macOS dependencies; we repeat it here so the
+# `use raw_window_handle::...` import inside `#[cfg(target_os = "windows")]`
+# resolves correctly on the Windows build target.
+raw-window-handle = "0.6"

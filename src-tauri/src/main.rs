@@ -416,8 +416,9 @@ fn set_window_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
             .window_handle()
             .map_err(|e| format!("window_handle failed: {e}"))?;
 
+        // NonZeroIsize::get() returns isize; cast to *mut c_void (HWND = *mut c_void).
         let hwnd: HWND = match handle.as_raw() {
-            RawWindowHandle::Win32(h) => h.hwnd.get() as HWND,
+            RawWindowHandle::Win32(h) => h.hwnd.get() as *mut core::ffi::c_void,
             _ => return Err("unexpected window handle type on Windows".into()),
         };
 
@@ -434,7 +435,7 @@ fn set_window_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
                 SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as isize);
             }
             // LWA_ALPHA (0x2) — use the bAlpha parameter, ignore colorref.
-            let result = SetLayeredWindowAttributes(hwnd, 0, alpha_byte, LWA_ALPHA);
+            let result = SetLayeredWindowAttributes(hwnd, 0u32, alpha_byte, LWA_ALPHA);
             if result == 0 {
                 return Err(format!(
                     "SetLayeredWindowAttributes failed (alpha={alpha_byte})"
