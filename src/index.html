@@ -147,7 +147,10 @@
 
        IMPORTANT: fly-in must NOT animate opacity, or it will override this
        class every time the window is summoned. The animation only touches
-       transform — opacity is free for blur state management. */
+       transform — opacity is free for blur state management.
+       NOTE: This class is no longer toggled directly. On Linux, setNativeOpacity()
+       sets #window's inline opacity style instead (same visual effect, no class
+       conflict). The class definition is kept for reference / future use. */
     .window--blurred {
       opacity: 0.5;
     }
@@ -1117,8 +1120,9 @@
     // defined in CSS on .window so both directions animate smoothly.
     //
     // Implementation:
-    //   - junk://blur         → add    .window--blurred  (if pref is ON)
-    //   - junk://focus-change → remove .window--blurred  (always)
+    //   - junk://blur         → setNativeOpacity(0.5)  (if pref is ON)
+    //   - junk://focus-change → setNativeOpacity(1.0)  (always)
+    //   On macOS/Windows: native IPC. On Linux: CSS inline opacity on #window.
     //
     // WHY junk://blur instead of tauri://blur?
     //   tauri://blur is a WebKit-level event and does not fire reliably on
@@ -1130,10 +1134,31 @@
     // while blurred doesn't leave it stuck at 50%.
 
     // setNativeOpacity: sets opacity on the entire native window compositor
-    // surface via NSWindow.alphaValue (macOS). This is the only way to make
-    // the frosted-glass vibrancy layer see-through. CSS opacity only affects
-    // DOM elements and leaves the native window background fully opaque.
+    // surface. Platform behaviour:
+    //   macOS:   NSWindow.alphaValue via objc2 IPC — dims the whole native
+    //            surface including the vibrancy layer (CSS opacity can't).
+    //   Windows: SetLayeredWindowAttributes via Win32 IPC — whole-window alpha.
+    //   Linux:   No universal cross-compositor API; we toggle the CSS class
+    //            .window--blurred on #window instead. This works because Linux
+    //            Junk windows have no native backdrop-blur layer — the WebView
+    //            background IS the window, so CSS opacity dims everything.
+    //
+    // We detect Linux by the absence of Macintosh + Win32 in the UA string.
+    // This is reliable inside Tauri's WebView since the UA is set by the OS.
+    const _isLinux = !navigator.userAgent.includes('Macintosh') &&
+                     !navigator.userAgent.includes('Win32') &&
+                     !navigator.userAgent.includes('Windows');
+    const _windowEl = document.getElementById('window');
+
     function setNativeOpacity(value) {
+      if (_isLinux) {
+        // CSS opacity path for Linux — no native IPC needed.
+        if (_windowEl) {
+          _windowEl.style.opacity = value < 1.0 ? String(value) : '';
+        }
+        return;
+      }
+      // macOS / Windows: native IPC handles it.
       ipc('set_window_opacity', { opacity: value }).catch(() => {});
     }
 
@@ -1714,7 +1739,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.4 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.5 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

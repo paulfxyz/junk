@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "3.1.4"
+version = "3.1.5"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -109,3 +109,10 @@ raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.6"
+# windows-sys provides safe, zero-cost bindings to the Win32 API.
+# We use SetWindowLongPtrW + SetLayeredWindowAttributes for the dim-on-blur
+# opacity effect on Windows (SetLayeredWindowAttributes requires WS_EX_LAYERED).
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+] }

@@ -345,8 +345,7 @@ fn set_window_size(app: AppHandle, width: u32, height: u32) -> Result<(), String
         .map_err(|e| format!("set_window_size({w},{h}) failed: {e}"))
 }
 
-/// Set the native window opacity (0.0 – 1.0) via NSWindow.alphaValue on macOS,
-/// falling back to a no-op on Windows/Linux where the effect isn’t needed.
+/// Set the native window opacity (0.0 – 1.0).
 ///
 /// WHY native opacity instead of CSS opacity on .window?
 ///   CSS opacity makes the DOM element semi-transparent but the native macOS
@@ -357,13 +356,27 @@ fn set_window_size(app: AppHandle, width: u32, height: u32) -> Result<(), String
 ///   surface, including the vibrancy layer, so the window genuinely becomes
 ///   see-through at the OS level.
 ///
-/// Called by JS on junk://blur (0.5) and junk://focus-change (1.0).
+/// Platform implementations:
+///   macOS:   NSWindow.alphaValue  — via objc2 msg_send to the NS window.
+///   Windows: SetLayeredWindowAttributes(hwnd, 0, alpha_byte, LWA_ALPHA)
+///            Requires WS_EX_LAYERED extended style (set once, idempotent).
+///            Junk's window is already transparent (DWM compositor handles it);
+///            the layered style additionally lets Win32 control overall opacity.
+///   Linux:   X11/_NET_WM_WINDOW_OPACITY requires xcb and isn't honoured by all
+///            compositors; Wayland has no equivalent standard protocol.
+///            We return Ok(()) and let the JS side toggle a CSS opacity class
+///            on #window — valid since Linux has no native backdrop-blur layer.
+///
+/// Called by JS on junk://blur (0.5) and junk://focus-change / tauri://focus (1.0).
 #[tauri::command]
 fn set_window_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or("main window not found")?;
 
+    // ── macOS ─────────────────────────────────────────────────────────────────
+    // NSWindow.alphaValue dims the entire native window surface, including the
+    // vibrancy (frosted-glass) layer that CSS cannot reach.
     #[cfg(target_os = "macos")]
     {
         use objc2::msg_send;
@@ -383,12 +396,75 @@ fn set_window_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
             let clamped = opacity.clamp(0.0, 1.0);
             let () = msg_send![ns_window, setAlphaValue: clamped];
         }
+        log::debug!("set_window_opacity(macOS): alphaValue={opacity:.2}");
     }
 
-    // Windows / Linux: no-op. The vibrancy effect is CSS-only there and
-    // CSS opacity on .window is sufficient (no native compositor layer).
-    #[cfg(not(target_os = "macos"))]
-    let _ = opacity;
+    // ── Windows ───────────────────────────────────────────────────────────────
+    // SetLayeredWindowAttributes(hwnd, colorref=0, alpha, LWA_ALPHA) sets the
+    // whole-window transparency for a WS_EX_LAYERED window.
+    // We ensure the LAYERED extended style is present every call (idempotent).
+    #[cfg(target_os = "windows")]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW,
+            GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
+        };
+
+        let handle = window
+            .window_handle()
+            .map_err(|e| format!("window_handle failed: {e}"))?;
+
+        let hwnd: HWND = match handle.as_raw() {
+            RawWindowHandle::Win32(h) => h.hwnd.get() as HWND,
+            _ => return Err("unexpected window handle type on Windows".into()),
+        };
+
+        let clamped = opacity.clamp(0.0, 1.0);
+        // Map 0.0–1.0 float to 0–255 byte expected by Win32
+        let alpha_byte = (clamped * 255.0).round() as u8;
+
+        unsafe {
+            // Ensure WS_EX_LAYERED is set — required for SetLayeredWindowAttributes.
+            // GetWindowLongPtrW / SetWindowLongPtrW are idempotent if the flag
+            // is already present, so this is safe to call on every opacity change.
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if ex_style & (WS_EX_LAYERED as isize) == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as isize);
+            }
+            // LWA_ALPHA (0x2) — use the bAlpha parameter, ignore colorref.
+            let result = SetLayeredWindowAttributes(hwnd, 0, alpha_byte, LWA_ALPHA);
+            if result == 0 {
+                return Err(format!(
+                    "SetLayeredWindowAttributes failed (alpha={alpha_byte})"
+                ));
+            }
+        }
+        log::debug!("set_window_opacity(Windows): alpha_byte={alpha_byte} ({opacity:.2})");
+    }
+
+    // ── Linux (X11 / Wayland) ─────────────────────────────────────────────────
+    // There is no single cross-compositor opacity API on Linux that works for
+    // both X11 and Wayland without heavy platform detection.
+    //
+    // On X11 the _NET_WM_WINDOW_OPACITY atom works but requires xcb/xlib bindings
+    // and is not honoured by all compositors.
+    // On Wayland there is no standard protocol for per-window opacity.
+    //
+    // Since Junk's window on Linux does NOT use a native vibrancy layer (it's a
+    // plain frameless window with CSS background), CSS opacity on the root
+    // #window element produces the correct visual effect — the window content
+    // and background dim together, and the desktop shows through the
+    // WebView's transparent background area.
+    //
+    // The JS side handles this: it emits both a native IPC call (this function)
+    // AND toggles the CSS class .window--blurred on Linux. See index.html.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = opacity; // handled by JS CSS class
+        log::debug!("set_window_opacity(Linux): delegating to CSS class (opacity={opacity:.2})");
+    }
 
     Ok(())
 }

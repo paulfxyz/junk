@@ -4,6 +4,27 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.5] — 2026-06-20
+
+### Fix: dim-on-blur opacity now works on Windows and Linux
+
+#### Fixed
+- **Windows**: `set_window_opacity` now calls `SetLayeredWindowAttributes`
+  Win32 API with `LWA_ALPHA` flag, giving whole-window compositor opacity.
+  - Ensures `WS_EX_LAYERED` extended style is present before every call (idempotent).
+  - Uses `windows-sys` crate for type-safe Win32 bindings.
+  - Maps 0.0–1.0 float to 0–255 `BYTE` as Win32 expects.
+- **Linux**: No single cross-compositor opacity API exists for X11 + Wayland.
+  On Linux, `set_window_opacity` returns `Ok(())` and the JS side sets inline
+  `style.opacity` on `#window` directly. This works because Junk on Linux has
+  no native backdrop-blur layer — the WebView background is the window, so CSS
+  opacity correctly dims the entire visible surface.
+- **macOS**: Unchanged — still uses `NSWindow.alphaValue` via objc2 (working since v3.1.4).
+- JS `setNativeOpacity()` now detects Linux via User-Agent and uses the CSS path
+  automatically; macOS/Windows still route through the native IPC command.
+
+---
+
 ## [3.1.4] — 2026-06-20
 
 ### Fix: use NSWindow.alphaValue for true window-level opacity
