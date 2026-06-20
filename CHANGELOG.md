@@ -4,6 +4,21 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.1] — 2026-06-20
+
+### Dim when unfocused
+
+#### Added
+- **Dim when unfocused** — When the user switches to another app, Junk fades
+  to 70% opacity. On re-focus it snaps back to 100% instantly. The transition
+  is 0.18s ease, defined in CSS on `.window` so both directions animate.
+  Implemented via `tauri://blur` (adds `.window--blurred`) and `tauri://focus`
+  (removes it). Default: **ON**. Toggle in Preferences: “Dim when unfocused —
+  Fade to 70% opacity when you switch to another app”. Persisted to
+  `localStorage['junk-dim-blur']`.
+
+---
+
 ## [3.1.0] — 2026-06-06
 
 ### Fix: always-on-top now actually stays on top on macOS

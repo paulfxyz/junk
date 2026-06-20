@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.1.0)
+  Junk — frontend (v3.1.1)
   ═══════════════════════════════════════════════════════════════════════════════
 
   Features (current as of v3.0.9):
@@ -138,7 +138,14 @@
         0 12px 40px rgba(0,0,0,0.18);           /* ambient fallback (Windows/Linux only)  */
       overflow: hidden;
       animation: fly-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-      transition: background 0.2s;
+      transition: background 0.2s, opacity 0.18s ease;
+    }
+
+    /* Dim when window loses focus (user switched to another app).
+       Only active when 'Dim when unfocused' preference is ON.
+       Fade out: 0.18s. Fade back in: same, feels snappy on re-focus. */
+    .window--blurred {
+      opacity: 0.7;
     }
 
     @keyframes fly-in {
@@ -679,6 +686,18 @@
             </label>
           </div>
 
+          <!-- Dim when unfocused -->
+          <div class="prefs-row">
+            <span class="prefs-row-label">
+              Dim when unfocused
+              <span class="prefs-row-hint">Fade to 70% opacity when you switch to another app</span>
+            </span>
+            <label class="toggle-wrap">
+              <input type="checkbox" id="toggle-dim-blur" checked />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
           <!-- Launch at login -->
           <div class="prefs-row">
             <span class="prefs-row-label">
@@ -733,9 +752,9 @@
 
   <script type="module">
     // ═══════════════════════════════════════════════════════════════════════
-    // Junk — frontend script (v3.1.0)
+    // Junk — frontend script (v3.1.1)
     //
-    // Features (v3.1.0):
+    // Features (v3.1.1):
     //   1. Custom shortcut  — hotkey-key-input captures keydown, calls set_hotkey()
     //   2. Position memory  — saves outer_position after every drag, restores on show
     //   2b. Always on top   — default ON, toggle in prefs, persisted in localStorage
@@ -793,6 +812,7 @@
     const prefsCloseBtn   = document.getElementById('prefs-close');
     const footerPrefsBtn  = document.getElementById('footer-prefs-btn');
     const toggleAlwaysOnTop = document.getElementById('toggle-always-on-top');
+    const toggleDimBlur   = document.getElementById('toggle-dim-blur');
     const toggleLaunch    = document.getElementById('toggle-launch');
     const toggleAutoUpdate= document.getElementById('toggle-autoupdate');
     const toggleMarkdown  = document.getElementById('toggle-markdown');
@@ -819,6 +839,7 @@
     const KEY_WIN_POS     = 'junk-win-pos';     // JSON {x,y}
     const KEY_WIN_SIZE    = 'junk-win-size';    // JSON {w,h}
     const KEY_ALWAYS_TOP  = 'junk-always-top';  // 'true' | 'false'
+    const KEY_DIM_BLUR    = 'junk-dim-blur';    // 'true' | 'false'
 
     // ── Content persistence ──────────────────────────────────────────────────
     function loadContent() {
@@ -1079,6 +1100,35 @@
       const saved = localStorage.getItem(KEY_ALWAYS_TOP);
       const on = saved !== 'false'; // undefined/null/true all map to ON
       applyAlwaysOnTop(on);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FEATURE 2c: Dim when unfocused
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // When the user clicks into another app, Junk fades to 70% opacity.
+    // On re-focus it snaps back to 100%. The transition (0.18s ease) is
+    // defined in CSS on .window so both directions animate smoothly.
+    //
+    // Implementation:
+    //   - tauri://blur  → add    .window--blurred  (if pref is ON)
+    //   - tauri://focus → remove .window--blurred  (always, regardless of pref)
+    //
+    // The class is always cleared on focus so toggling the pref OFF while
+    // the window is blurred doesn't leave it stuck at 70%.
+
+    function applyDimBlur(on) {
+      toggleDimBlur.checked = on;
+      localStorage.setItem(KEY_DIM_BLUR, String(on));
+      // If turning OFF while currently blurred, restore opacity immediately
+      if (!on) windowEl.classList.remove('window--blurred');
+    }
+
+    function loadDimBlur() {
+      const saved = localStorage.getItem(KEY_DIM_BLUR);
+      const on = saved !== 'false'; // default ON
+      toggleDimBlur.checked = on;
+      // Don't add the class here — window starts focused
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1488,14 +1538,22 @@
         return;
       }
       listenFn('tauri://focus', async () => {
+        // Always remove blur dim — window is now focused
+        windowEl.classList.remove('window--blurred');
         triggerFlyIn();
         await restoreWindowPosition();
-        // Re-assert always-on-top on every show — macOS resets the window
-        // level when a window is hidden and re-shown via CGWindowLevel.
-        // We must call set_always_on_top() again each time the window appears.
+        // Re-assert always-on-top on every show — macOS resets CGWindowLevel
+        // on orderOut → makeKeyAndOrderFront (hide/show cycle).
         const alwaysOn = localStorage.getItem(KEY_ALWAYS_TOP) !== 'false';
         ipc('set_always_on_top', { always_on_top: alwaysOn }).catch(() => {});
         setTimeout(focusEditor, 20);
+      });
+
+      listenFn('tauri://blur', () => {
+        // Dim the window when user switches to another app.
+        // Only if the pref is ON (default: true).
+        const dimOn = localStorage.getItem(KEY_DIM_BLUR) !== 'false';
+        if (dimOn) windowEl.classList.add('window--blurred');
       });
       listenFn('open-prefs', () => openPrefs());
     }
@@ -1599,6 +1657,7 @@
     editorDim.addEventListener('click', closePrefs);
     prefsCloseBtn.addEventListener('click', closePrefs);
     toggleAlwaysOnTop.addEventListener('change', () => applyAlwaysOnTop(toggleAlwaysOnTop.checked));
+    toggleDimBlur.addEventListener('change', () => applyDimBlur(toggleDimBlur.checked));
     toggleLaunch.addEventListener('change', onLaunchAtLoginChange);
 
     toggleAutoUpdate.addEventListener('change', () => {
@@ -1618,6 +1677,7 @@
     loadTheme();
     loadMdMode();
     loadAlwaysOnTop();
+    loadDimBlur();
     initHotkeyDisplay();
     setupTauriEvents();
     maybeAutoCheckOnStartup();
@@ -1626,7 +1686,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.0 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.1 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>
