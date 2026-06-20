@@ -4,6 +4,33 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.7] — 2026-06-21
+
+### Fix: fly-in animation replays on every focus-gain (click-back bug)
+
+#### Problem
+`tauri://focus` fires on **both** show() (hidden→visible) **and** re-focus (user clicks
+back into an already-visible window). Triggering `triggerFlyIn()` inside `tauri://focus`
+caused the fly-in animation to replay every time focus returned to Junk — producing a
+jarring double-display effect even when the window was never hidden.
+
+#### Fix
+- New `junk://show` custom event, emitted from Rust `show_and_focus()` **only** during
+  the hidden→visible transition (before `window.show()`).
+- JS moves fly-in, position restore, and always-on-top re-assertion to `junk://show`.
+- `tauri://focus` now only calls `setNativeOpacity(1.0)` as a safety net — no fly-in.
+- Result: fly-in plays exactly once per summon, never on re-focus.
+
+#### Event map (post-fix)
+| Event | Trigger | JS action |
+|---|---|---|
+| `junk://show` | Rust `show_and_focus()` — hidden→visible only | fly-in + restorePos + alwaysOnTop |
+| `junk://focus-change` | Rust `WindowEvent::Focused(true)` — any focus | `setNativeOpacity(1.0)` |
+| `tauri://focus` | Tauri — show() or re-focus | `setNativeOpacity(1.0)` (safety net) |
+| `junk://blur` | Rust `WindowEvent::Focused(false)` — any blur | `setNativeOpacity(0.5)` if pref ON |
+
+---
+
 ## [3.1.6] — 2026-06-21
 
 ### Fix: dim-on-blur flash on summon (fade-in ghost)

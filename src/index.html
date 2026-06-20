@@ -1120,9 +1120,11 @@
     // defined in CSS on .window so both directions animate smoothly.
     //
     // Implementation:
+    //   - junk://show         → fly-in + restorePos + alwaysOnTop (hide→show only)
     //   - junk://blur         → setNativeOpacity(0.5)  (if pref is ON)
-    //   - junk://focus-change → setNativeOpacity(1.0)  (always)
-    //   On macOS/Windows: native IPC. On Linux: CSS inline opacity on #window.
+    //   - junk://focus-change → setNativeOpacity(1.0)  (re-focus, no fly-in)
+    //   - tauri://focus       → setNativeOpacity(1.0)  (safety net only)
+    //   On macOS/Windows: native IPC for opacity. On Linux: CSS inline opacity on #window.
     //
     // WHY junk://blur instead of tauri://blur?
     //   tauri://blur is a WebKit-level event and does not fire reliably on
@@ -1583,12 +1585,18 @@
         setTimeout(setupTauriEvents, 100);
         return;
       }
-      listenFn('tauri://focus', async () => {
-        // Restore full native opacity. Rust's show_and_focus() already resets
-        // opacity to 1.0 before show() — so this call is normally a no-op.
-        // We keep it as a safety net for cases where focus arrives without a
-        // prior hide/show cycle (e.g. user clicks back into an already-visible
-        // Junk window after it was blurred by switching apps).
+      // junk://show — emitted from Rust show_and_focus(), only on hide→show cycles.
+      //
+      // WHY not tauri://focus for the fly-in?
+      //   tauri://focus fires on BOTH show() AND on re-focus (user clicks back
+      //   into an already-visible window). Triggering triggerFlyIn() there caused
+      //   the animation to replay every time focus returned — the "bug" where
+      //   clicking back into Junk shows a weird double-display effect.
+      //   junk://show fires only when transitioning from hidden → visible, so
+      //   the fly-in plays exactly once per summon.
+      listenFn('junk://show', async () => {
+        // Opacity was already reset to 1.0 by Rust before show() — this is
+        // a safety-net no-op, but cheap and harmless.
         setNativeOpacity(1.0);
         triggerFlyIn();
         await restoreWindowPosition();
@@ -1597,6 +1605,12 @@
         const alwaysOn = localStorage.getItem(KEY_ALWAYS_TOP) !== 'false';
         ipc('set_always_on_top', { always_on_top: alwaysOn }).catch(() => {});
         setTimeout(focusEditor, 20);
+      });
+
+      // tauri://focus — fires on both show() and re-focus (click into window).
+      // Only used as an opacity safety net now. Fly-in moved to junk://show.
+      listenFn('tauri://focus', () => {
+        setNativeOpacity(1.0);
       });
 
       // junk://blur — emitted from Rust WindowEvent::Focused(false).
@@ -1743,7 +1757,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.6 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.7 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

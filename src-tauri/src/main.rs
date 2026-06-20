@@ -641,6 +641,19 @@ fn show_and_focus(window: &WebviewWindow) {
         log::warn!("show_and_focus: opacity reset failed: {e}");
         // Non-fatal — proceed with show() even if opacity reset fails.
     }
+    // Emit junk://show BEFORE window.show() so the JS fly-in listener can
+    // distinguish a hide→show cycle from a plain focus-gain.
+    //
+    // WHY a custom event instead of relying on tauri://focus?
+    //   tauri://focus fires on BOTH show() AND on re-focus (user clicks back
+    //   into an already-visible window). If we trigger triggerFlyIn() in
+    //   tauri://focus, the animation replays every time the user clicks back
+    //   into Junk — not just when it's summoned from hidden.
+    //   junk://show fires only here, only when the window transitions from
+    //   hidden → visible. JS triggers the fly-in on junk://show instead.
+    if let Err(e) = window.emit("junk://show", ()) {
+        log::warn!("show_and_focus: emit junk://show failed: {e}");
+    }
     if let Err(e) = window.show() {
         log::error!("show_and_focus: show failed: {e}");
         return;
