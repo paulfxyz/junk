@@ -4,6 +4,22 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.3] — 2026-06-20
+
+### Fix: fly-in animation no longer overrides dim-on-blur opacity
+
+#### Fixed
+- **Root cause of dim not working** — the fly-in animation keyframes animated
+  `opacity: 0 → 1` with `fill-mode: both`, which locked `.window` opacity
+  at 1 after every show event, overriding `.window--blurred` (opacity: 0.5).
+  Every `tauri://focus` re-triggered the animation via `triggerFlyIn()`,
+  resetting opacity to 1 regardless of blur state.
+- **Fix** — removed `opacity` from `@keyframes fly-in` entirely. The animation
+  now only touches `transform` (scale + translateY). Opacity is left free for
+  the blur state system (`.window--blurred` at 0.5, default 1.0).
+
+---
+
 ## [3.1.2] — 2026-06-20
 
 ### Fix: dim on blur now works reliably on macOS

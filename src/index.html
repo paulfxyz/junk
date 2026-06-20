@@ -143,14 +143,20 @@
 
     /* Dim when window loses focus (user switched to another app).
        Only active when 'Dim when unfocused' preference is ON.
-       Fade out: 0.18s. Fade back in: same, feels snappy on re-focus. */
+       Uses opacity on the window directly.
+
+       IMPORTANT: fly-in must NOT animate opacity, or it will override this
+       class every time the window is summoned. The animation only touches
+       transform — opacity is free for blur state management. */
     .window--blurred {
       opacity: 0.5;
     }
 
     @keyframes fly-in {
-      from { opacity: 0; transform: scale(0.96) translateY(-10px); }
-      to   { opacity: 1; transform: scale(1)    translateY(0); }
+      /* opacity intentionally excluded — it conflicts with .window--blurred.
+         The window starts fully opaque; only transform animates on show. */
+      from { transform: scale(0.96) translateY(-10px); }
+      to   { transform: scale(1)    translateY(0); }
     }
 
     /* ── Textarea ────────────────────────────────────────────────────────────── */
@@ -1699,7 +1705,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.2 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.3 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>
