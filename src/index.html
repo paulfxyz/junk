@@ -1584,7 +1584,11 @@
         return;
       }
       listenFn('tauri://focus', async () => {
-        // Restore full native opacity whenever the window is shown/focused
+        // Restore full native opacity. Rust's show_and_focus() already resets
+        // opacity to 1.0 before show() — so this call is normally a no-op.
+        // We keep it as a safety net for cases where focus arrives without a
+        // prior hide/show cycle (e.g. user clicks back into an already-visible
+        // Junk window after it was blurred by switching apps).
         setNativeOpacity(1.0);
         triggerFlyIn();
         await restoreWindowPosition();
@@ -1739,7 +1743,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.5 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.6 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>

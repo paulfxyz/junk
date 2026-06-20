@@ -619,7 +619,28 @@ fn toggle_window(window: &WebviewWindow) {
 /// On macOS, `show()` alone doesn't always transfer keyboard focus — the app
 /// may appear but the previous app still has the keyboard. `set_focus()` fixes
 /// this by bringing both the window and the app process to the front.
+///
+/// WHY we reset opacity to 1.0 here (before show()):
+///   The dim-on-blur feature sets NSWindow.alphaValue to 0.5 when the window
+///   loses focus. If we call show() while opacity is still 0.5, the window
+///   briefly flashes at half-opacity before the JS tauri://focus handler can
+///   call set_window_opacity(1.0). This creates a visible "ghost" flash — the
+///   window appears dim for one or two frames, then snaps to full opacity while
+///   the fly-in animation also kicks in, causing a double-display effect.
+///
+///   The fix: unconditionally restore opacity to 1.0 *before* show(). This is
+///   safe because:
+///   - The window is hidden, so there's nothing to flicker.
+///   - The JS tauri://focus handler will also call setNativeOpacity(1.0),
+///     which is now a no-op (idempotent — already 1.0).
+///   - If the user has dim-on-blur OFF, the opacity was already 1.0 — also a no-op.
 fn show_and_focus(window: &WebviewWindow) {
+    // Reset opacity before making the window visible — prevents flash.
+    // See doc comment above for the full rationale.
+    if let Err(e) = set_window_opacity_raw(window, 1.0) {
+        log::warn!("show_and_focus: opacity reset failed: {e}");
+        // Non-fatal — proceed with show() even if opacity reset fails.
+    }
     if let Err(e) = window.show() {
         log::error!("show_and_focus: show failed: {e}");
         return;
@@ -627,6 +648,69 @@ fn show_and_focus(window: &WebviewWindow) {
     if let Err(e) = window.set_focus() {
         log::warn!("show_and_focus: set_focus failed: {e}");
     }
+}
+
+/// Internal opacity setter — same logic as the `set_window_opacity` IPC command
+/// but callable directly from Rust (not via AppHandle IPC).
+///
+/// Used by `show_and_focus` to reset opacity before making the window visible,
+/// which prevents the dim-on-blur flash on summon. See `show_and_focus` doc
+/// comment for the full race-condition explanation.
+fn set_window_opacity_raw(window: &WebviewWindow, opacity: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+
+        let ns_view = window
+            .ns_view()
+            .map_err(|e| format!("ns_view failed: {e}"))? as *mut AnyObject;
+        unsafe {
+            let ns_window: *mut AnyObject = msg_send![ns_view, window];
+            if ns_window.is_null() {
+                return Err("ns_view.window() returned null".into());
+            }
+            let clamped = opacity.clamp(0.0, 1.0);
+            let () = msg_send![ns_window, setAlphaValue: clamped];
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW,
+            GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
+        };
+
+        let handle = window
+            .window_handle()
+            .map_err(|e| format!("window_handle failed: {e}"))?;
+        let hwnd: HWND = match handle.as_raw() {
+            RawWindowHandle::Win32(h) => h.hwnd.get() as *mut core::ffi::c_void,
+            _ => return Err("unexpected window handle type on Windows".into()),
+        };
+        let clamped = opacity.clamp(0.0, 1.0);
+        let alpha_byte = (clamped * 255.0).round() as u8;
+        unsafe {
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if ex_style & (WS_EX_LAYERED as isize) == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as isize);
+            }
+            let result = SetLayeredWindowAttributes(hwnd, 0u32, alpha_byte, LWA_ALPHA);
+            if result == 0 {
+                return Err(format!("SetLayeredWindowAttributes failed (alpha={alpha_byte})"));
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = opacity; // JS CSS path on Linux
+    }
+
+    Ok(())
 }
 
 // ── Global shortcut registration ──────────────────────────────────────────────

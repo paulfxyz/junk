@@ -4,6 +4,40 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.6] — 2026-06-21
+
+### Fix: dim-on-blur flash on summon (fade-in ghost)
+
+#### Problem
+When the window was summoned after being blurred (opacity = 0.5), it briefly flashed
+at half-opacity before the JS `tauri://focus` handler could restore full opacity.
+The sequence was:
+
+1. `window.show()` → window visible at 0.5 (last blur state)
+2. `tauri://focus` fires in JS → `setNativeOpacity(1.0)` called
+3. Window snaps to full opacity while fly-in animation simultaneously starts
+4. Result: dim ghost visible for 1–2 frames, then fly-in over a full-opacity window
+   → double-display flash effect
+
+#### Fix
+`show_and_focus()` in `main.rs` now calls `set_window_opacity_raw(window, 1.0)` **before**
+`window.show()`. This guarantees the window is always at full opacity the instant it
+becomes visible — no flash, no race condition.
+
+- New internal helper `set_window_opacity_raw(window, opacity)` mirrors the IPC command
+  but is callable directly from Rust without going through the AppHandle bridge.
+- JS `tauri://focus` still calls `setNativeOpacity(1.0)` as a safety net (now a no-op).
+- Fix applies on all three platforms (macOS, Windows, Linux).
+
+#### Also in this release
+- `ARCHITECTURE.md`: added §4.16 — full dim-on-blur documentation (event flow, platform
+  table, flash bug root cause + fix, JS platform detection, user preference wiring)
+- `README.md`: added "Dim on blur" to features table with cross-platform notes
+- Version history table in ARCHITECTURE.md extended with v3.1.1–v3.1.6 entries
+- Website: new "Fades when idle" feature card in the features grid
+
+---
+
 ## [3.1.5] — 2026-06-20
 
 ### Fix: dim-on-blur opacity now works on Windows and Linux

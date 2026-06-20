@@ -1002,10 +1002,90 @@ Bump both before tagging. The Rust code uses `env!("CARGO_PKG_VERSION")` — it 
 
 ---
 
+## §4.16 Dim on Blur — Cross-Platform Window Opacity
+
+When the user switches to another app, Junk dims to 50% opacity so it stays visible but unobtrusive. When focus returns, it snaps back to full opacity. This feature ships across all three platforms but uses a different mechanism on each.
+
+### Why CSS opacity is insufficient (macOS)
+
+On macOS, Junk uses `window-vibrancy` (NSVisualEffectView) for the frosted-glass background. This is a **native compositor layer** that lives below the WebView — CSS `opacity` on any DOM element cannot reach it. Setting `.window { opacity: 0.5 }` in CSS makes the WebView content semi-transparent but the vibrancy layer remains fully opaque, so the window looks unchanged.
+
+The fix is `NSWindow.setAlphaValue(0.5)`, which operates at the OS compositor level and dims the entire window surface including vibrancy. This is called via `objc2::msg_send!`.
+
+### Platform implementations
+
+| Platform | Mechanism | Notes |
+|----------|-----------|-------|
+| macOS | `NSWindow.setAlphaValue(f64)` via objc2 | Dims entire native window including vibrancy layer |
+| Windows | `SetLayeredWindowAttributes(hwnd, LWA_ALPHA, u8)` | Requires `WS_EX_LAYERED` on extended window style (set idempotently each call) |
+| Linux | JS sets `#window { style.opacity }` inline | No universal X11+Wayland compositor API; CSS works because no native backdrop-blur layer exists |
+
+### Rust IPC command
+
+`set_window_opacity(opacity: f64)` in `main.rs` — called from JS with `invoke('set_window_opacity', { opacity: 0.5 })`. Three `#[cfg]` blocks each handle one platform. Returns `Result<(), String>`.
+
+There is also a private Rust helper `set_window_opacity_raw(window, opacity)` with the same logic but callable directly from Rust without going through the IPC bridge — used by `show_and_focus()`.
+
+### Event flow
+
+```
+User presses ⌘J
+  → toggle_window() → show_and_focus()
+      → set_window_opacity_raw(window, 1.0)   ← reset BEFORE show()
+      → window.show()                          ← visible at full opacity
+      → window.set_focus()
+  → tauri://focus fires in JS
+      → setNativeOpacity(1.0)                 ← safety-net no-op
+      → triggerFlyIn()                        ← clean fly-in, no flash
+
+User switches to another app
+  → Rust WindowEvent::Focused(false)
+      → emit("junk://blur")
+  → JS listenFn('junk://blur')
+      → setNativeOpacity(0.5)                 ← dims window
+      → (opacity persists while window is hidden)
+
+User presses ⌘J again (window was dim-hidden)
+  → show_and_focus()
+      → set_window_opacity_raw(window, 1.0)   ← CRITICAL: resets 0.5 → 1.0 BEFORE show()
+      → window.show()                          ← appears at full opacity, no flash
+```
+
+### The flash bug (fixed in v3.1.6)
+
+Before v3.1.6, opacity was only reset in JS on `tauri://focus`. But `tauri://focus` fires *after* `show()` — so the window was briefly visible at 0.5 opacity before snapping to 1.0. Combined with the fly-in animation starting at the same moment, this created a double-display flash: the dim ghost appeared first, then the fly-in played on top.
+
+Fix: `show_and_focus()` now calls `set_window_opacity_raw(window, 1.0)` before `window.show()`. The window is always at full opacity the instant it becomes visible.
+
+### JS platform detection
+
+`setNativeOpacity()` in `index.html` detects Linux via the WebView User-Agent:
+
+```js
+const _isLinux = !navigator.userAgent.includes('Macintosh') &&
+                 !navigator.userAgent.includes('Win32') &&
+                 !navigator.userAgent.includes('Windows');
+```
+
+On Linux it sets `#window { style.opacity }` directly. On macOS/Windows it calls the native IPC command. The CSS class `.window--blurred` still exists in the stylesheet for reference but is no longer toggled programmatically.
+
+### User preference
+
+The pref key `junk-dim-blur` in `localStorage` (default: `"true"`) controls whether the dim fires. The toggle in Preferences Panel maps to `toggle-dim-blur` checkbox. If the pref is OFF, `junk://blur` still fires but `setNativeOpacity` is not called.
+
+---
+
 ## 11. Version History Highlights
 
 | Version | Key change |
 |---|---|
+| v3.1.6 | Fix: dim-on-blur flash — `show_and_focus()` resets opacity to 1.0 before `show()` |
+| v3.1.5 | Dim-on-blur extended to Windows (`SetLayeredWindowAttributes`) and Linux (CSS inline opacity) |
+| v3.1.4 | Dim-on-blur: `NSWindow.setAlphaValue` via objc2 — correct macOS implementation |
+| v3.1.3 | Dim-on-blur fix: removed opacity from fly-in keyframes |
+| v3.1.2 | Dim-on-blur: emit `junk://blur` from Rust `WindowEvent::Focused` |
+| v3.1.1 | Dim-on-blur feature attempt (broken: `tauri://blur` never fires for always-on-top on macOS) |
+| v3.1.0 | Fixed always-on-top macOS reset — re-assert on every `tauri://focus` + tauri.conf default |
 | v3.0.9 | Always-on-top restored as runtime `set_always_on_top` IPC command; version label fix; confirmed position/font/theme memory wiring |
 | v3.0.8 | Critical fix: reverted `index.html` to pre-deep-comment commit `4a18c56` (1567 lines) — resolves JavaScriptCore `windowEl` ReferenceError |
 | v3.0.7 | Revert attempt: restored v3.0.4 `index.html` — still broken (v3.0.4 was the deep-comment version). Fixed in v3.0.8. |
