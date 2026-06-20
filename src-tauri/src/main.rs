@@ -345,6 +345,54 @@ fn set_window_size(app: AppHandle, width: u32, height: u32) -> Result<(), String
         .map_err(|e| format!("set_window_size({w},{h}) failed: {e}"))
 }
 
+/// Set the native window opacity (0.0 – 1.0) via NSWindow.alphaValue on macOS,
+/// falling back to a no-op on Windows/Linux where the effect isn’t needed.
+///
+/// WHY native opacity instead of CSS opacity on .window?
+///   CSS opacity makes the DOM element semi-transparent but the native macOS
+///   window background (vibrancy/frosted-glass layer) remains fully opaque
+///   behind it. The user sees a dimmed UI chrome but the window itself is
+///   still solid — content behind the window does not show through.
+///   NSWindow.alphaValue sets the opacity of the entire window compositor
+///   surface, including the vibrancy layer, so the window genuinely becomes
+///   see-through at the OS level.
+///
+/// Called by JS on junk://blur (0.5) and junk://focus-change (1.0).
+#[tauri::command]
+fn set_window_opacity(app: AppHandle, opacity: f64) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+
+        let ns_view = window
+            .ns_view()
+            .map_err(|e| format!("ns_view failed: {e}"))? as *mut AnyObject;
+
+        unsafe {
+            // Walk from WKWebView → NSWindow
+            let ns_window: *mut AnyObject = msg_send![ns_view, window];
+            if ns_window.is_null() {
+                return Err("ns_view.window() returned null".into());
+            }
+            // NSWindow.alphaValue — sets opacity of the entire window surface
+            let clamped = opacity.clamp(0.0, 1.0);
+            let () = msg_send![ns_window, setAlphaValue: clamped];
+        }
+    }
+
+    // Windows / Linux: no-op. The vibrancy effect is CSS-only there and
+    // CSS opacity on .window is sufficient (no native compositor layer).
+    #[cfg(not(target_os = "macos"))]
+    let _ = opacity;
+
+    Ok(())
+}
+
 /// Enable or disable the "always on top" window level.
 ///
 /// Junk is a scratchpad — staying on top of other windows is its core UX.
@@ -789,6 +837,7 @@ fn main() {
             set_window_position,
             get_window_size,
             set_window_size,
+            set_window_opacity,
             set_always_on_top,
             set_hotkey,
         ])

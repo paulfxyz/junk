@@ -4,6 +4,26 @@ All notable changes to Junk are documented here. Format follows [Keep a Changelo
 
 ---
 
+## [3.1.4] — 2026-06-20
+
+### Fix: use NSWindow.alphaValue for true window-level opacity
+
+#### Fixed
+- **CSS opacity was wrong approach** — setting `opacity` on the DOM `.window`
+  element makes the UI semi-transparent but the native macOS window background
+  (vibrancy/frosted-glass layer) remains fully opaque. The window chrome stays
+  solid; content behind the window does not show through.
+- **Fix: NSWindow.alphaValue via Rust IPC** — new `set_window_opacity(opacity: f64)`
+  command calls `NSWindow.setAlphaValue()` via `objc2` `msg_send!`. This sets
+  opacity on the entire window compositor surface, including the vibrancy layer,
+  so the window genuinely becomes see-through at the OS level.
+- **CSS .window--blurred class removed** — no longer needed. Opacity is managed
+  entirely at the native window level.
+- On Windows/Linux: `set_window_opacity` is a no-op; CSS opacity on `.window`
+  is sufficient there since there is no native vibrancy layer to work around.
+
+---
+
 ## [3.1.3] — 2026-06-20
 
 ### Fix: fly-in animation no longer overrides dim-on-blur opacity

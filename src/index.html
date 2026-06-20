@@ -1129,18 +1129,27 @@
     // The class is always cleared on focus-change so toggling the pref OFF
     // while blurred doesn't leave it stuck at 50%.
 
+    // setNativeOpacity: sets opacity on the entire native window compositor
+    // surface via NSWindow.alphaValue (macOS). This is the only way to make
+    // the frosted-glass vibrancy layer see-through. CSS opacity only affects
+    // DOM elements and leaves the native window background fully opaque.
+    function setNativeOpacity(value) {
+      ipc('set_window_opacity', { opacity: value }).catch(() => {});
+    }
+
     function applyDimBlur(on) {
       toggleDimBlur.checked = on;
       localStorage.setItem(KEY_DIM_BLUR, String(on));
-      // If turning OFF while currently blurred, restore opacity immediately
-      if (!on) windowEl.classList.remove('window--blurred');
+      // If turning OFF while blurred, restore native opacity immediately
+      if (!on) setNativeOpacity(1.0);
     }
 
     function loadDimBlur() {
       const saved = localStorage.getItem(KEY_DIM_BLUR);
       const on = saved !== 'false'; // default ON
       toggleDimBlur.checked = on;
-      // Don't add the class here — window starts focused
+      // Window starts focused — ensure full opacity
+      setNativeOpacity(1.0);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1550,8 +1559,8 @@
         return;
       }
       listenFn('tauri://focus', async () => {
-        // Always remove blur dim — window is now focused
-        windowEl.classList.remove('window--blurred');
+        // Restore full native opacity whenever the window is shown/focused
+        setNativeOpacity(1.0);
         triggerFlyIn();
         await restoreWindowPosition();
         // Re-assert always-on-top on every show — macOS resets CGWindowLevel
@@ -1561,18 +1570,18 @@
         setTimeout(focusEditor, 20);
       });
 
-      // junk://blur fires from Rust WindowEvent::Focused(false) — reliable
-      // on macOS even for always-on-top windows (unlike tauri://blur).
+      // junk://blur — emitted from Rust WindowEvent::Focused(false).
+      // Sets native NSWindow.alphaValue to 0.5 so the entire window surface
+      // (including vibrancy layer) becomes see-through.
       listenFn('junk://blur', () => {
         const dimOn = localStorage.getItem(KEY_DIM_BLUR) !== 'false';
-        if (dimOn) windowEl.classList.add('window--blurred');
+        if (dimOn) setNativeOpacity(0.5);
       });
 
-      // junk://focus-change fires from Rust WindowEvent::Focused(true).
-      // Separate from tauri://focus (show/restore) — this handles switching
-      // back from another app while the window is already visible.
+      // junk://focus-change — emitted from Rust WindowEvent::Focused(true).
+      // Restore full opacity whenever focus returns.
       listenFn('junk://focus-change', () => {
-        windowEl.classList.remove('window--blurred');
+        setNativeOpacity(1.0);
       });
       listenFn('open-prefs', () => openPrefs());
     }
@@ -1705,7 +1714,7 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.3 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.1.4 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
   </script>
 </body>
 </html>
