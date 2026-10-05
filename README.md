@@ -1001,7 +1001,7 @@ Rust: parse_key_code("KeyK") → Code::KeyK
 </details>
 
 <details>
-<summary><strong>Single-file frontend</strong> (no build step, no npm runtime)</summary>
+<summary><strong>Bundled static frontend</strong> (no frontend build step)</summary>
 
 The frontend consists of `src/index.html`, `src/app.css`, `src/app.js` and `src/markdown.js`, with a bundled font and canonical brand artwork. No frontend bundler or remote JavaScript is required.
 
@@ -1752,11 +1752,11 @@ See the "macOS rounded corners: the full investigation" section in Architecture 
 
 ## Changelog
 
-### v3.1.8 — 2026-06-06
+### v3.1.7 — 2026-06-06
 
 Always on top restored; preferences toggleable; version label fix; confirmed position/font/theme memory.
 
-- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.1.8 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
+- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.1.7 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
 - **Version label fix** — The version display in the Preferences panel footer was hardcoded to `v3.0.4`. Now set to the correct version; `loadVersionDisplay()` overwrites it with the live version from `check_for_update()` IPC.
 - **Window position memory** — confirmed fully wired: `saveWindowGeometry()` called after every drag (`mouseup`, 80 ms delay) and after every resize (300 ms debounce). `restoreWindowGeometry()` called on startup and on every `tauri://focus` event.
 - **Font size memory** — confirmed: `loadFontSize()` on startup reads `localStorage['junk-font-size']`, falls back to 22 px. Slider `input` event saves immediately.
