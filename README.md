@@ -20,6 +20,8 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-f74c00?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![Website](https://img.shields.io/badge/website-thejunk.app-A0521E?style=flat-square)](https://thejunk.app)
 
+**Release status:** The current source is the v3.1.8 hardening candidate. All native builds and Markdown regression tests passed in [this Actions run](https://github.com/paulfxyz/junk/actions/runs/37382252339), which contains the candidate installers for signed-in reviewers. Native installation and interaction QA is still required before publication; the stable downloads below remain v3.1.7 and do not contain these changes.
+
 ---
 
 ## What is Junk?
@@ -89,7 +91,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_3.1.8_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.7_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -107,7 +109,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_3.1.8_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.7_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -126,9 +128,9 @@ msiexec /i Junk_3.1.8_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.8_amd64.AppImage
-chmod +x Junk_3.1.8_amd64.AppImage
-./Junk_3.1.8_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.7_amd64.AppImage
+chmod +x Junk_3.1.7_amd64.AppImage
+./Junk_3.1.7_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -140,8 +142,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.8_amd64.deb
-sudo dpkg -i Junk_3.1.8_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.7_amd64.deb
+sudo dpkg -i Junk_3.1.7_amd64.deb
 junk
 ```
 
