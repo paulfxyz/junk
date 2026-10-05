@@ -52,11 +52,23 @@ concurrency:
 
 # ── Build jobs ─────────────────────────────────────────────────────────────────
 jobs:
+  test-markdown:
+    name: Markdown security regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
 
   # ────────────────────────────────────────────────────────────────────────────
   # macOS — universal binary (.dmg)
   # ────────────────────────────────────────────────────────────────────────────
   build-macos:
+    needs: test-markdown
     name: macOS (universal)
     runs-on: macos-latest
 
@@ -130,6 +142,7 @@ jobs:
   # Windows — NSIS installer + MSI
   # ────────────────────────────────────────────────────────────────────────────
   build-windows:
+    needs: test-markdown
     name: Windows
     runs-on: windows-latest
 
@@ -187,6 +200,7 @@ jobs:
   # Linux — AppImage + .deb
   # ────────────────────────────────────────────────────────────────────────────
   build-linux:
+    needs: test-markdown
     name: Linux
     runs-on: ubuntu-latest
 

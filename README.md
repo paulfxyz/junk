@@ -1,3 +1,5 @@
+<img src="src/brand/junk.svg" width="80" height="80" alt="Junk: a white dotless j with one peach dot on a dark tile" />
+
 ```
      ██╗██╗   ██╗███╗   ██╗██╗  ██╗
      ██║██║   ██║████╗  ██║██║ ██╔╝
@@ -9,14 +11,14 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-3.1.7-5b5bf6?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-3.1.8-A0521E?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-ffc131?style=flat-square&logo=tauri)](https://v2.tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-f74c00?style=flat-square&logo=rust)](https://www.rust-lang.org)
-[![Website](https://img.shields.io/badge/website-thejunk.app-5b5bf6?style=flat-square)](https://thejunk.app)
+[![Website](https://img.shields.io/badge/website-thejunk.app-A0521E?style=flat-square)](https://thejunk.app)
 
 ---
 
@@ -75,7 +77,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 | **Size memory** | Remembers window size between sessions — restored on every focus |
 | **Font size** | 14–28 px slider in Preferences — drives CSS custom property, live preview |
 | **Dark mode** | Light / Auto / Dark — Auto follows `prefers-color-scheme` with live listener |
-| **Markdown preview** | ⌘M toggle — inline vanilla-JS parser, no library, zero bundle impact |
+| **Markdown preview** | ⌘M toggle, DOM-only renderer, literal HTML, restricted link schemes |
 | **Export** | Footer copy button — copies all content to clipboard with "Copied!" feedback |
 | **Rounded corners** | True OS-level rounded corners via `objc2` CALayer `masksToBounds` (macOS) |
 | **Native window shadow** | macOS WindowServer drop shadow via `"shadow": true` — adapts to dark mode |
@@ -87,7 +89,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### macOS (Universal — Apple Silicon + Intel)
 
-1. Download **`Junk_3.1.7_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.8_universal.dmg`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Open the DMG → drag **Junk** into **Applications**
 3. Remove the Gatekeeper quarantine flag:
 
@@ -105,7 +107,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 
 ### Windows
 
-1. Download **`Junk_3.1.7_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
+1. Download **`Junk_3.1.8_x64-setup.exe`** from [Releases](https://github.com/paulfxyz/junk/releases)
 2. Run the installer. Windows SmartScreen will show a blue warning — click **More info** → **Run anyway**
 
    > **Why SmartScreen?** The binary is not code-signed with a Windows EV certificate ($200–500/yr). The source is fully public — build it yourself if you prefer (instructions below).
@@ -116,7 +118,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_3.1.7_x64_en-US.msi /quiet
+msiexec /i Junk_3.1.8_x64_en-US.msi /quiet
 ```
 
 ---
@@ -124,9 +126,9 @@ msiexec /i Junk_3.1.7_x64_en-US.msi /quiet
 ### Linux — AppImage
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.7_amd64.AppImage
-chmod +x Junk_3.1.7_amd64.AppImage
-./Junk_3.1.7_amd64.AppImage
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.8_amd64.AppImage
+chmod +x Junk_3.1.8_amd64.AppImage
+./Junk_3.1.8_amd64.AppImage
 ```
 
 Portable — runs on any modern x86_64 Linux without installation. No sudo required.
@@ -138,8 +140,8 @@ Portable — runs on any modern x86_64 Linux without installation. No sudo requi
 ### Linux — .deb (Debian / Ubuntu)
 
 ```sh
-wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.7_amd64.deb
-sudo dpkg -i Junk_3.1.7_amd64.deb
+wget https://github.com/paulfxyz/junk/releases/latest/download/Junk_3.1.8_amd64.deb
+sudo dpkg -i Junk_3.1.8_amd64.deb
 junk
 ```
 
@@ -183,12 +185,12 @@ The underlying mechanism on macOS is a per-user `launchd` LaunchAgent plist — 
 
 ### Auto-check for updates
 
-When enabled (default: on), Junk silently checks the GitHub Releases API ~2 seconds after first launch. If a newer version is found, the ⚙ icon turns purple. No nagging, no banners — just a quiet indicator.
+When enabled (default: on), Junk silently checks the GitHub Releases API ~2 seconds after first launch. If a newer version is found, the ⚙ icon uses the brand accent. No nagging, no banners — just a quiet indicator.
 
 The "Check now" button triggers an immediate check and shows the result inline:
 
 - **"You're up to date (3.0.4)"** — green
-- **"Update available: v3.x.x"** — purple, clickable link to releases page
+- **"Update available: v3.x.x"** — accent-colored, clickable link to releases page
 - **"Could not check — are you online?"** — red if the request fails
 
 The check is performed entirely in Rust via `tauri-plugin-http` — it never touches `window.fetch()`, so it is not blocked by the WebView's Content Security Policy. The current version is read from `CARGO_PKG_VERSION` at compile time — there are no hardcoded version strings in JS, and the frontend version label can never drift from the binary version.
@@ -234,7 +236,11 @@ Auto mode attaches a `MediaQueryList.addEventListener('change', ...)` listener t
 
 Toggle with **⌘M** / **Ctrl+M**, the footer button, or the toggle in Preferences. When on, the textarea hides and a rendered `#md-preview` div appears. Raw text is always stored in `localStorage` — the preview is render-only.
 
-The inline parser handles: h1/h2/h3, **bold**, _italic_, `code`, fenced code blocks, blockquotes, HR, unordered/ordered lists, `[links](url)`. No external library — ~80 lines of vanilla JS.
+The bundled `src/markdown.js` renderer handles h1/h2/h3, bold, italic, code, fenced code blocks, blockquotes, HR, unordered/ordered lists and links. It constructs DOM nodes and text nodes rather than injecting HTML strings. Raw HTML stays literal; only explicit HTTP, HTTPS and mailto links are clickable. Relative links, credential-bearing URLs and executable/local schemes remain text. This is a small scratchpad dialect, not a complete CommonMark implementation.
+
+From v3.1.8, scripts and the Space Grotesk font are bundled locally, Content Security Policy is enabled, and the frontend has no HTTP-plugin permission. Native update checks still contact the fixed GitHub Releases endpoint. Notes remain in localStorage; they are not encrypted at rest. These controls are defense in depth, not a claim that the entire application has undergone a professional security audit.
+
+Run `npm ci && npm test` for Markdown injection, link policy, formatting and configuration regression tests. The native platform builds depend on these tests passing.
 
 Switching back from preview to edit mode re-populates the textarea from `localStorage` — the content is never lost and the cursor is repositioned to the end of the text. All keyboard shortcuts (`⌘A`, `⌘Z`, `⌘V`) work normally in edit mode.
 
@@ -386,7 +392,7 @@ Every design decision traces back to this constraint:
 
 **Never ask for organisation.** The moment you ask a user where to put something, you've made them think about their system instead of their idea. Junk has one scratchpad. No inbox, no archive, no folder, no tag. The act of deciding what to keep and where to put it is a separate task for a separate tool.
 
-**Stay out of the way when not needed.** No Dock icon. No menu bar entry. No notification badge. No background network traffic (by default). Zero pixels and zero attention when you're not using it.
+**Stay out of the way when not needed.** No Dock icon or menu bar entry. Automatic update checks contact GitHub when enabled; the scratchpad and bundled font do not require a network connection.
 
 **Stay visible when needed.** When Junk is on screen, it floats above everything. It doesn't hide when you click away. You can look at Safari, look at Junk, copy from Safari, paste into Junk — without the window ever disappearing.
 
@@ -997,9 +1003,9 @@ Rust: parse_key_code("KeyK") → Code::KeyK
 <details>
 <summary><strong>Single-file frontend</strong> (no build step, no npm runtime)</summary>
 
-`src/index.html` is ~1,500 lines of HTML, CSS, and JavaScript — all inline, zero build step, zero npm runtime dependencies, zero external JS libraries.
+The frontend consists of `src/index.html`, `src/app.css`, `src/app.js` and `src/markdown.js`, with a bundled font and canonical brand artwork. No frontend bundler or remote JavaScript is required.
 
-**Why a single file?** Tauri embeds the frontend directory into the binary at compile time. A single file is simpler to audit, impossible to misconfigure, and eliminates the entire category of bundler/module-resolution bugs. There is no webpack.config.js to break, no node_modules directory to corrupt, no import map to misconfigure.
+Tauri embeds the frontend directory at compile time. Separating scripts makes a restrictive script policy practical, while the isolated Markdown renderer is directly testable. The `linkedom` development dependency supplies a DOM only for Node regression tests; it is not shipped in the app.
 
 **Why `<script type="module">`?** ES modules give:
 - Strict mode automatically — no `"use strict"` boilerplate
@@ -1657,9 +1663,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_3.1.7_universal.dmg` |
-| Windows | `Junk_3.1.7_x64-setup.exe` + `Junk_3.1.7_x64_en-US.msi` |
-| Ubuntu | `Junk_3.1.7_amd64.AppImage` + `Junk_3.1.7_amd64.deb` |
+| macOS | `Junk_3.1.8_universal.dmg` |
+| Windows | `Junk_3.1.8_x64-setup.exe` + `Junk_3.1.8_x64_en-US.msi` |
+| Ubuntu | `Junk_3.1.8_amd64.AppImage` + `Junk_3.1.8_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with a git log changelog.
 
@@ -1746,11 +1752,11 @@ See the "macOS rounded corners: the full investigation" section in Architecture 
 
 ## Changelog
 
-### v3.1.7 — 2026-06-06
+### v3.1.8 — 2026-06-06
 
 Always on top restored; preferences toggleable; version label fix; confirmed position/font/theme memory.
 
-- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.1.7 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
+- **Always on top restored** — The window's floating-above-all-windows behaviour was inadvertently disabled in v3.0.2 when `alwaysOnTop` was set to `false` in `tauri.conf.json` during the visual rework. Restored in v3.1.8 as a runtime feature: new `set_always_on_top(always_on_top: bool)` Rust IPC command, a toggle in Preferences ("Always on top — Keep Junk above all other windows"), default `ON`, persisted to `localStorage['junk-always-top']`, applied on every startup via `loadAlwaysOnTop()`. New capability permission: `core:window:allow-set-always-on-top`.
 - **Version label fix** — The version display in the Preferences panel footer was hardcoded to `v3.0.4`. Now set to the correct version; `loadVersionDisplay()` overwrites it with the live version from `check_for_update()` IPC.
 - **Window position memory** — confirmed fully wired: `saveWindowGeometry()` called after every drag (`mouseup`, 80 ms delay) and after every resize (300 ms debounce). `restoreWindowGeometry()` called on startup and on every `tauri://focus` event.
 - **Font size memory** — confirmed: `loadFontSize()` on startup reads `localStorage['junk-font-size']`, falls back to 22 px. Slider `input` event saves immediately.

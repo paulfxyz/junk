@@ -1,0 +1,525 @@
+@font-face {
+      font-family: 'Space Grotesk';
+      src: url('fonts/SpaceGrotesk.ttf') format('truetype');
+      font-weight: 300 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    /* ── CSS custom properties — theme tokens ──────────────────────────────── */
+    :root {
+      /* Light mode (default) */
+      --bg-glass:         rgba(255, 255, 255, 0.76);
+      --bg-glass-strong:  rgba(255, 255, 255, 0.92);
+      --border:           rgba(255, 255, 255, 0.65);
+      --text-primary:     #0a0a0a;
+      --text-secondary:   #666;
+      --text-placeholder: #aaa;
+      --footer-bg:        rgba(255, 255, 255, 0.55);
+      --footer-border:    rgba(0, 0, 0, 0.07);
+      --btn-hover:        rgba(0, 0, 0, 0.06);
+      --btn-active:       rgba(0, 0, 0, 0.10);
+      --accent:           #A0521E;
+      --accent-hover:     #824016;
+      --on-accent:        #fff;
+      --danger:           #e04040;
+      --success:          #22c55e;
+      --shadow: none; /* box-shadow defined directly on .window */
+      --scrollbar-track:  transparent;
+      --scrollbar-thumb:  rgba(0,0,0,0.15);
+      --prefs-bg:         rgba(250,250,250,0.96);
+      --prefs-section-bg: rgba(0,0,0,0.03);
+      --input-bg:         rgba(0,0,0,0.04);
+      --input-border:     rgba(0,0,0,0.12);
+      --kbd-bg:           rgba(0,0,0,0.07);
+      --md-code-bg:       rgba(0,0,0,0.06);
+      --md-blockquote-border: rgba(0,0,0,0.2);
+    }
+
+    :root[data-theme="dark"] {
+      --bg-glass:         rgba(30, 30, 35, 0.88);
+      --bg-glass-strong:  rgba(28, 28, 32, 0.97);
+      --border:           rgba(255, 255, 255, 0.10);
+      --text-primary:     #f0f0f0;
+      --text-secondary:   #888;
+      --text-placeholder: #555;
+      --footer-bg:        rgba(20, 20, 24, 0.75);
+      --footer-border:    rgba(255, 255, 255, 0.06);
+      --btn-hover:        rgba(255,255,255,0.07);
+      --btn-active:       rgba(255,255,255,0.12);
+      --accent:           #FFE5D0;
+      --accent-hover:     #F2D1B3;
+      --on-accent:        #111;
+      --danger:           #f87171;
+      --success:          #4ade80;
+      --shadow: none; /* box-shadow defined directly on .window */
+      --scrollbar-track:  transparent;
+      --scrollbar-thumb:  rgba(255,255,255,0.12);
+      --prefs-bg:         rgba(24,24,28,0.98);
+      --prefs-section-bg: rgba(255,255,255,0.04);
+      --input-bg:         rgba(255,255,255,0.06);
+      --input-border:     rgba(255,255,255,0.10);
+      --kbd-bg:           rgba(255,255,255,0.10);
+      --md-code-bg:       rgba(255,255,255,0.08);
+      --md-blockquote-border: rgba(255,255,255,0.2);
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Body / root — fully transparent ──────────────────────────────── */
+    /* On macOS, NSVisualEffectView (via window-vibrancy Rust crate) is the      */
+    /* background AND handles corner clipping — html/body must be fully         */
+    /* transparent so the vibrancy layer shows through.                         */
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent !important;
+      overflow: hidden;
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Main window container ──────────────────────────────────────────────── */
+    /* On macOS: background is transparent — NSVisualEffectView (vibrancy) is   */
+    /*   the actual background. We only add a very subtle ring via box-shadow.  */
+    /* On Windows/Linux: keep the frosted glass CSS background + backdrop-blur. */
+    .window {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      background: var(--bg-glass);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: none;
+      border-radius: 14px;
+      /* Edge ring: defines the window boundary on all platforms.              */
+      /* macOS: OS native shadow (shadow:true in tauri.conf) handles the big   */
+      /*   ambient drop shadow outside the frame. CSS only adds the crisp ring */
+      /*   and a hair of inner glow so the frosted edge looks polished.        */
+      /* Windows/Linux: keep the tighter CSS drop shadow as fallback.          */
+      box-shadow:
+        0 0 0 0.5px rgba(0,0,0,0.20),          /* crisp outer ring — visible on light bg */
+        0 0 0 1px   rgba(255,255,255,0.25),     /* inner white glow                       */
+        0  2px  8px rgba(0,0,0,0.12),           /* tight near-shadow (Windows/Linux only) */
+        0 12px 40px rgba(0,0,0,0.18);           /* ambient fallback (Windows/Linux only)  */
+      overflow: hidden;
+      animation: fly-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      transition: background 0.2s, opacity 0.18s ease;
+    }
+
+    /* Dim when window loses focus (user switched to another app).
+       Only active when 'Dim when unfocused' preference is ON.
+       Uses opacity on the window directly.
+
+       IMPORTANT: fly-in must NOT animate opacity, or it will override this
+       class every time the window is summoned. The animation only touches
+       transform — opacity is free for blur state management.
+       NOTE: This class is no longer toggled directly. On Linux, setNativeOpacity()
+       sets #window's inline opacity style instead (same visual effect, no class
+       conflict). The class definition is kept for reference / future use. */
+    .window--blurred {
+      opacity: 0.5;
+    }
+
+    @keyframes fly-in {
+      /* opacity intentionally excluded — it conflicts with .window--blurred.
+         The window starts fully opaque; only transform animates on show. */
+      from { transform: scale(0.96) translateY(-10px); }
+      to   { transform: scale(1)    translateY(0); }
+    }
+
+    /* ── Textarea ────────────────────────────────────────────────────────────── */
+    #editor {
+      flex: 1;
+      width: 100%;
+      padding: 22px 26px 0;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      color: var(--text-primary);
+      /* font-size driven by --font-size CSS var, default 22px */
+      font-size: var(--font-size, 22px);
+      font-family: inherit;
+      font-weight: 400;
+      line-height: 1.8;
+      letter-spacing: -0.01em;
+      caret-color: var(--accent);
+      transition: font-size 0.15s, color 0.2s;
+      overflow-y: auto;
+    }
+
+    #editor::placeholder {
+      color: var(--text-placeholder);
+      font-weight: 300;
+    }
+
+    #editor::-webkit-scrollbar { width: 4px; }
+    #editor::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    #editor::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 2px;
+    }
+
+    /* ── Markdown preview pane (replaces textarea when MD mode is on) ──────── */
+    #md-preview {
+      flex: 1;
+      padding: 22px 26px 0;
+      overflow-y: auto;
+      color: var(--text-primary);
+      font-size: var(--font-size, 22px);
+      font-family: inherit;
+      line-height: 1.8;
+      display: none;
+      transition: color 0.2s;
+    }
+
+    #md-preview::-webkit-scrollbar { width: 4px; }
+    #md-preview::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    #md-preview::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 2px;
+    }
+
+    /* Markdown rendered styles */
+    #md-preview h1 { font-size: 1.4em; font-weight: 700; margin: 0.6em 0 0.3em; }
+    #md-preview h2 { font-size: 1.2em; font-weight: 600; margin: 0.5em 0 0.25em; }
+    #md-preview h3 { font-size: 1.05em; font-weight: 600; margin: 0.4em 0 0.2em; }
+    #md-preview p  { margin: 0.4em 0; }
+    #md-preview ul, #md-preview ol { padding-left: 1.4em; margin: 0.4em 0; }
+    #md-preview li { margin: 0.15em 0; }
+    #md-preview code {
+      background: var(--md-code-bg);
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.82em;
+    }
+    #md-preview pre {
+      background: var(--md-code-bg);
+      border-radius: 6px;
+      padding: 0.8em 1em;
+      overflow-x: auto;
+      margin: 0.5em 0;
+    }
+    #md-preview pre code { background: none; padding: 0; }
+    #md-preview blockquote {
+      border-left: 3px solid var(--md-blockquote-border);
+      padding-left: 0.8em;
+      color: var(--text-secondary);
+      margin: 0.4em 0;
+    }
+    #md-preview hr {
+      border: none;
+      border-top: 1px solid var(--footer-border);
+      margin: 0.8em 0;
+    }
+    #md-preview a { color: var(--accent); text-decoration: underline; }
+    #md-preview strong { font-weight: 700; }
+    #md-preview em { font-style: italic; }
+
+    /* ── Footer bar ─────────────────────────────────────────────────────────── */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      height: 40px;
+      min-height: 40px;
+      background: var(--footer-bg);
+      border-top: 1px solid var(--footer-border);
+      transition: background 0.2s, border-color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .footer-left, .footer-right {
+      display: flex; align-items: center; gap: 2px;
+    }
+
+    /* ── Footer icon buttons ─────────────────────────────────────────────────── */
+    .icon-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px;
+      border: none; background: none;
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 15px;
+      transition: background 0.12s, color 0.12s;
+    }
+    .icon-btn:hover  { background: var(--btn-hover);  color: var(--text-primary); }
+    .icon-btn:active { background: var(--btn-active); }
+    .icon-btn.active { color: var(--accent); }
+
+    /* Save status label */
+    #save-status {
+      font-size: 10px;
+      color: var(--text-secondary);
+      opacity: 0;
+      transition: none;
+      pointer-events: none;
+      margin: 0 4px;
+    }
+    #save-status.saving {
+      animation: save-fade 1.4s ease-out forwards;
+    }
+    @keyframes save-fade {
+      0%   { opacity: 0.6; }
+      60%  { opacity: 0.6; }
+      100% { opacity: 0; }
+    }
+
+    /* ── Dim overlay (closes prefs when clicking outside) ────────────────────── */
+    #editor-dim {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.15);
+      backdrop-filter: none;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s;
+      z-index: 10;
+      border-radius: 14px;
+    }
+    .prefs-open #editor-dim {
+      opacity: 1; pointer-events: all;
+    }
+
+    /* ── Preferences panel ───────────────────────────────────────────────────── */
+    #prefs-panel {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 0;
+      overflow: hidden;
+      background: var(--prefs-bg);
+      border-top: 1px solid var(--footer-border);
+      border-radius: 0 0 14px 14px;
+      z-index: 20;
+      transition: height 0.28s cubic-bezier(0.32, 0, 0.04, 1);
+    }
+
+    .prefs-open #prefs-panel {
+      /* Use a generous max-height (90% of window) so all options are visible. */
+      /* The prefs-inner div scrolls if content overflows.                     */
+      height: min(460px, calc(100% - 44px));
+    }
+
+    .prefs-inner {
+      padding: 16px 18px 20px;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      /* Ensure scrollbar is always reachable */
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .prefs-inner::-webkit-scrollbar { width: 3px; }
+    .prefs-inner::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
+
+    /* Prefs header */
+    .prefs-header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .prefs-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    #prefs-close {
+      width: 22px; height: 22px;
+      border: none; background: none;
+      border-radius: 5px; cursor: pointer;
+      font-size: 13px; color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s, color 0.1s;
+    }
+    #prefs-close:hover { background: var(--btn-hover); color: var(--text-primary); }
+
+    /* Prefs section */
+    .prefs-section {
+      background: var(--prefs-section-bg);
+      border-radius: 8px;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    /* Prefs row */
+    .prefs-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--footer-border);
+      gap: 12px;
+    }
+    .prefs-row:last-child { border-bottom: none; }
+
+    .prefs-row-label {
+      font-size: 12.5px; font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .prefs-row-hint {
+      font-size: 10.5px; color: var(--text-secondary);
+      margin-top: 1px; display: block;
+    }
+
+    /* ── Toggle switch ───────────────────────────────────────────────────────── */
+    .toggle-wrap {
+      position: relative; width: 36px; height: 20px; flex-shrink: 0;
+    }
+    .toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.15);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    input:checked + .toggle-track { background: var(--accent); }
+    input:checked + .toggle-track::after { transform: translateX(16px); }
+
+    /* ── Hotkey picker ───────────────────────────────────────────────────────── */
+    .hotkey-row {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .hotkey-modifier {
+      font-size: 11.5px; font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--kbd-bg);
+      border-radius: 5px;
+      padding: 2px 7px;
+      flex-shrink: 0;
+    }
+    .hotkey-plus { font-size: 11px; color: var(--text-secondary); }
+    #hotkey-key-input {
+      width: 48px;
+      padding: 3px 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12px; font-weight: 600;
+      color: var(--text-primary);
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+      cursor: pointer;
+    }
+    #hotkey-key-input:focus {
+      border-color: var(--accent);
+      background: var(--input-bg);
+    }
+    #hotkey-status {
+      font-size: 10.5px;
+      color: var(--text-secondary);
+      width: 100%;
+      min-height: 14px;
+    }
+    #hotkey-status.ok    { color: var(--success); }
+    #hotkey-status.error { color: var(--danger); }
+
+    /* ── Font size slider ────────────────────────────────────────────────────── */
+    .font-size-row {
+      display: flex; align-items: center; gap: 10px;
+    }
+    #font-size-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--input-border);
+      outline: none;
+      cursor: pointer;
+    }
+    #font-size-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    #font-size-label {
+      font-size: 11px; font-weight: 600;
+      color: var(--text-secondary);
+      min-width: 28px; text-align: right;
+    }
+
+    /* ── Dark mode selector ──────────────────────────────────────────────────── */
+    .theme-group {
+      display: flex; gap: 4px;
+    }
+    .theme-btn {
+      flex: 1;
+      padding: 5px 0;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      background: var(--input-bg);
+      font-family: inherit; font-size: 11px; font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .theme-btn:hover { background: var(--btn-hover); color: var(--text-primary); }
+    .theme-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--on-accent);
+    }
+
+    /* ── Export / update area ────────────────────────────────────────────────── */
+    .prefs-actions {
+      display: flex; gap: 6px;
+    }
+    .action-btn {
+      flex: 1;
+      padding: 7px 10px;
+      border: 1px solid var(--input-border);
+      border-radius: 7px;
+      background: var(--input-bg);
+      font-family: inherit; font-size: 11.5px; font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .action-btn:hover { background: var(--btn-hover); }
+    .action-btn:active { background: var(--btn-active); }
+    .action-btn.copied { color: var(--success); border-color: var(--success); }
+
+    /* ── Update status ───────────────────────────────────────────────────────── */
+    #update-status {
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding: 4px 12px 0;
+      min-height: 18px;
+    }
+    #update-status.up-to-date   { color: var(--success); }
+    #update-status.update-available { color: var(--accent); }
+    #update-status.update-error { color: var(--danger); }
+
+    /* ── Credits row ─────────────────────────────────────────────────────────── */
+    .credits-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .credits-text {
+      font-size: 10.5px; color: var(--text-secondary);
+    }
+    .credits-text a { color: var(--accent); text-decoration: none; }
+    .credits-text a:hover { text-decoration: underline; }
+    #current-version {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }

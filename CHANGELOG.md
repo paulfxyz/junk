@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.1.8
+
+- Replace the HTML-string Markdown parser with DOM-only rendering. Raw HTML remains text in headings, paragraphs, lists, quotes, links and code.
+- Allow explicit HTTP, HTTPS and mailto links only; reject local/executable schemes, control characters, relative URLs and URL credentials.
+- Enable Content Security Policy, separate bundled scripts and remove the unused frontend HTTP permission. The native GitHub update check remains available.
+- Bundle Space Grotesk and its SIL Open Font License instead of loading Google Fonts at runtime.
+- Align desktop app icons, in-app identity and theme accents with the campaign's white dotless-j mark, single peach dot, dark tile and rust/peach palette.
+- Add automated security and formatting regression tests before native builds.
+
+These changes do not provide note encryption or establish independent security certification. Native installation and OS-specific interaction checks remain distinct from automated builds and frontend tests.
+
+---
+
 All notable changes to Junk are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/).
 
 ---

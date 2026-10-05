@@ -1,15 +1,17 @@
 {
   "name": "junk",
-  "version": "3.0.0",
-  "description": "Global-hotkey scratchpad \u2014 \u2318J/Ctrl+J to summon a floating notepad anywhere.",
+  "version": "3.1.8",
+  "description": "Global-hotkey scratchpad — ⌘J/Ctrl+J to summon a floating notepad anywhere.",
   "private": true,
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "test": "node --test tests/*.test.cjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.0.0",
+    "linkedom": "^0.18.13"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"

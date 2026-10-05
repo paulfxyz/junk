@@ -3,7 +3,7 @@
 
   "identifier": "default",
 
-  "description": "Default capability set for Junk v3.0.0. Includes window management (show, hide, drag, position), global shortcuts, autostart, and HTTP for update checks.",
+  "description": "Local-window capabilities for Junk. Update checks use a fixed GitHub endpoint in Rust; the frontend has no HTTP-plugin permission.",
 
   "local": true,
 
@@ -32,8 +32,6 @@
 
     "autostart:allow-enable",
     "autostart:allow-disable",
-    "autostart:allow-is-enabled",
-
-    "http:default"
+    "autostart:allow-is-enabled"
   ]
 }
