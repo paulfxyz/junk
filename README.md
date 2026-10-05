@@ -120,7 +120,7 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 **MSI (enterprise / silent deployment):**
 
 ```
-msiexec /i Junk_3.1.8_x64_en-US.msi /quiet
+msiexec /i Junk_3.1.7_x64_en-US.msi /quiet
 ```
 
 ---
@@ -340,11 +340,11 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
 
 ## Security
 
-**Network:** The only outbound request Junk ever makes is an optional `fetch` to `https://api.github.com/repos/paulfxyz/junk/releases/latest` for update checks — disable in Preferences. No analytics, no telemetry, no crash reporting.
+**Network:** The reviewed v3.1.8 source bundles its font and uses a fixed GitHub Releases endpoint for optional native update checks. Disable automatic checks in Preferences if desired. Opening a link is a separate user-initiated network action; these observations are not a guarantee about every operating-system or WebView request.
 
-**Local data:** Your text lives on your machine only. Never sent anywhere.
+**Local data:** Notes are saved in localStorage, not encrypted at rest. The reviewed update-check request does not attach note content. Clipboard export and links remain under the user's control; do not treat the scratchpad as a secret vault.
 
-**Code audit:** `src-tauri/src/main.rs` is ~700 lines. The entire frontend is one HTML file (~1,500 lines). MIT-licensed, fully public — [read the source](https://github.com/paulfxyz/junk).
+**Reviewability:** Rust backend code and separate static frontend files are public and MIT-licensed. The Markdown renderer has automated regression tests, but this is not an independent security audit or certification. [Read the source](https://github.com/paulfxyz/junk).
 
 <details>
 <summary><strong>Tauri capability permissions (minimal surface area)</strong></summary>
@@ -358,6 +358,7 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
     "core:window:allow-set-focus",
     "core:window:allow-is-visible",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-always-on-top",
     "core:window:allow-outer-position",
     "core:window:allow-set-position",
     "core:window:allow-inner-size",
@@ -368,15 +369,14 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
     "global-shortcut:allow-is-registered",
     "autostart:allow-enable",
     "autostart:allow-disable",
-    "autostart:allow-is-enabled",
-    "http:default"
+    "autostart:allow-is-enabled"
   ]
 }
 ```
 
-Notably absent: filesystem access, clipboard API (browser `paste` events need no permission), notifications, camera, microphone, arbitrary network access beyond the GitHub API.
+The frontend has no HTTP-plugin permission. The Rust update command makes its own fixed-endpoint request; CSP does not constrain native Rust networking. See the authoritative [capability file](src-tauri/capabilities/default.json) and [CSP configuration](src-tauri/tauri.conf.json).
 
-The Tauri capability system is additive — every permission listed here is explicitly required. The `core:default` bundle grants only basic IPC bootstrap functionality. Every window, webview, and plugin permission above it is individually declared. This means adding a new feature requires a conscious permission addition — there is no ambient over-permissioning.
+Capabilities are additive, including the permissions supplied by `core:default`. Review both the named permissions and the Rust commands when changing the application's security boundary; this list alone does not prove least privilege.
 
 **Why `core:window:allow-inner-size` and `core:window:allow-set-size`?** Added in v3.0.1 for window size memory. Reads the current window dimensions before saving position, and restores them on next focus. Both permissions were absent in v3.0.0 and caused silent IPC failures when size memory was first implemented.
 
