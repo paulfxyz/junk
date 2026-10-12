@@ -11,7 +11,7 @@
   the flying scratchpad — built with Rust + Tauri v2
 ```
 
-[![Version](https://img.shields.io/badge/version-3.1.8-A0521E?style=flat-square)](https://github.com/paulfxyz/junk/releases)
+[![Version](https://img.shields.io/badge/version-3.2.0-A0521E?style=flat-square)](https://github.com/paulfxyz/junk/releases)
 [![macOS](https://img.shields.io/badge/macOS-universal-black?style=flat-square&logo=apple)](https://github.com/paulfxyz/junk/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows)](https://github.com/paulfxyz/junk/releases)
 [![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb-fcc624?style=flat-square&logo=linux&logoColor=black)](https://github.com/paulfxyz/junk/releases)
@@ -20,7 +20,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-f74c00?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![Website](https://img.shields.io/badge/website-thejunk.app-A0521E?style=flat-square)](https://thejunk.app)
 
-**Release status:** The current source is the v3.1.8 hardening candidate. All native builds and Markdown regression tests passed in [this Actions run](https://github.com/paulfxyz/junk/actions/runs/37382252339), which contains the candidate installers for signed-in reviewers. Native installation and interaction QA is still required before publication; the stable downloads below remain v3.1.7 and do not contain these changes.
+**Release status:** v3.2.0 adds tabs, ⌘S save-as-file and a configurable auto-hide timer, and it is the first release to include the v3.1.8 security hardening (DOM-only Markdown, CSP, bundled font). Frontend behaviour is covered by automated tests and a mocked-bridge browser run, and every native build is produced by CI. Native hands-on QA on each operating system (native Save dialog, blur timer, tab shortcuts) is still pending, so please report anything odd on the [issue tracker](https://github.com/paulfxyz/junk/issues).
 
 ---
 
@@ -46,7 +46,7 @@ Most tools fail this test in one of three ways:
 2. **They want commitment.** Notion asks which database. Apple Notes asks which folder. Bear asks which tag. Junk asks nothing.
 3. **They disappear when you look away.** Every "quick-capture" popup that hides on blur destroys the clipboard workflow that makes the tool actually useful.
 
-Junk is designed to fail none of these tests. It appears in ~80 ms. It asks nothing. It never hides unless you explicitly dismiss it.
+Junk is designed to fail none of these tests. It appears in ~80 ms. It asks nothing. It stays out of your way: you decide whether it floats forever or tucks itself away after a few seconds in the background.
 
 ---
 
@@ -61,13 +61,15 @@ Junk is designed to fail none of these tests. It appears in ~80 ms. It asks noth
 | **Launch at login** | Optional OS login item via `tauri-plugin-autostart` (LaunchAgent on macOS) |
 | **Auto-update check** | Checks GitHub releases API on launch (optional, toggleable in Preferences) |
 | **Preferences panel** | In-window frosted-glass sheet — launch at login, auto-update, credits |
-| **Auto-save** | Content persists to `localStorage` with a 300 ms debounce — zero data loss |
+| **Auto-save** | Every tab persists to `localStorage` with a 300 ms debounce, written as one atomic snapshot |
 | **Frosted glass UI** | `backdrop-filter: blur(40px) saturate(180%)` — beautiful on any wallpaper |
 | **Always on top** | Floats above all other windows so it's always reachable |
 | **Frameless + draggable** | No title bar, no traffic lights — drag anywhere (except textarea) to reposition |
 | **No Dock icon** | macOS `Accessory` activation policy — stays invisible between uses |
 | **No Taskbar icon** | `skipTaskbar: true` on Windows/Linux — same philosophy |
-| **No blur-hide** | Window stays visible when you click another app (critical for clipboard workflows) |
+| **Auto-hide timer** | After you click into another app, Junk dims and then hides itself after a delay you choose (3–120 s, **10 s by default**). Switch it off in Preferences to keep Junk floating forever. The timer runs in Rust so it keeps working while the window is in the background |
+| **Tabs** | **⌘T** / **Ctrl+T** opens a new note in a new tab. Switch with **⌘1–9**, **Ctrl+Tab** or **⌘⇧[ / ⌘⇧]**; close with the tab's × or **⌘⇧W**; **⌘⇧T** reopens the last closed tab. All tabs are saved locally |
+| **Save as file** | **⌘S** / **Ctrl+S** (or the disk icon in the footer) opens the native Save dialog. Name it anything: `.txt`, `.md`, `.log`, any text format |
 | **Fly-in animation** | 180 ms spring easing — appears with intention, not a pop |
 | **Universal binary** | macOS: native Apple Silicon + Intel in a single `.dmg` |
 | **Tiny footprint** | ~18 MB RAM, ~4 MB installer — versus 130 MB / 160 MB for the old Electron version |
@@ -157,13 +159,21 @@ junk
 | **Esc** | Hide the window (or close Preferences if open) |
 | **⌘,** / **Ctrl+,** | Open Preferences panel |
 | **⌘M** / **Ctrl+M** | Toggle Markdown preview |
+| **⌘T** / **Ctrl+T** | New tab |
+| **⌘⇧T** / **Ctrl+Shift+T** | Reopen the last closed tab |
+| **⌘⇧W** / **Ctrl+Shift+W** | Close the current tab (also the × on the tab, or a middle-click) |
+| **⌘1–9** / **Ctrl+1–9** | Jump to tab 1–9 |
+| **Ctrl+Tab**, **Ctrl+Shift+Tab**, **⌘⇧]**, **⌘⇧[** | Next / previous tab |
+| **⌘S** / **Ctrl+S** | Save the current tab as a file (native Save dialog, any extension) |
 | Click + drag (anywhere except textarea) | Move the window |
 | **⌘A** / **Ctrl+A** | Select all text |
 | **⌘V** / **Ctrl+V** | Paste — works without clicking the textarea first |
 | **⌘Z** / **Ctrl+Z** | Undo — history survives hide/show cycles |
 | Just type | Saves automatically, 300 ms debounce |
 
-There is no close button. The only ways to dismiss are **Esc** and **⌘J / Ctrl+J** — this prevents accidentally losing the window entirely.
+There is no window close button. Dismiss Junk with **Esc**, **⌘J / Ctrl+J**, or let the auto-hide timer do it when you click away. Nothing is lost either way: hiding never discards your tabs.
+
+> **Why not ⌘W?** The default macOS menu maps ⌘W to "Close Window", which would hide Junk instead of closing a tab, so tabs close with **⌘⇧W** on every platform.
 
 ---
 
@@ -205,11 +215,41 @@ Keys not available: bare modifier keys (Shift, Ctrl, Meta) and Escape (already r
 
 The key is captured as `KeyboardEvent.code` (e.g. `"KeyJ"`, `"F2"`, `"Space"`) rather than `KeyboardEvent.key` (e.g. `"j"`, `"F2"`, `" "`). This is deliberate: `.code` is the physical key position on the keyboard, layout-independent — it works correctly on AZERTY, Dvorak, Colemak, and every other keyboard layout. `.key` would produce incorrect characters on non-QWERTY layouts.
 
+### Auto-hide when unfocused
+
+Default: **on, 10 seconds**. When you click into another app, Junk first dims (if *Dim when unfocused* is on) and then hides itself once it has been in the background for the chosen time. Click back or press your hotkey before it fires and the countdown is cancelled. Turn the toggle off for the classic always-floating scratchpad (the setting is stored as `0`, "never").
+
+How it works, and why it lives in Rust:
+- JS stores `junk-auto-hide` and `junk-auto-hide-seconds` in `localStorage` and pushes the value to Rust with `set_auto_hide(seconds)` on startup and on every change.
+- On `WindowEvent::Focused(false)` Rust starts a countdown thread. Each countdown carries a **generation ticket**; focus, a manual show, a settings change or an open Save dialog bumps the generation, so a stale countdown can never hide the window (see `src-tauri/src/auto_hide.rs`, unit-tested).
+- When the delay elapses, the hide happens on the main thread after re-checking that the window is still visible and still unfocused.
+- A WebView `setTimeout` would be the obvious alternative, but background WebViews can throttle timers, which is exactly when this one has to fire.
+- It works independently of *Dim when unfocused*, and it is paused while the native Save dialog is open (the dialog steals focus from Junk).
+
+### Tabs
+
+**⌘T** / **Ctrl+T** (or the **+** icon in the top bar) opens a fresh note. Each tab is a plain-text note; its label is the first non-empty line, so tabs name themselves as you type.
+
+- All tabs live in one `localStorage` entry, `junk-notes-v1`, written atomically after every change. The pure data logic is in `src/notes.js` (no DOM, fully unit-tested); `app.js` only renders it.
+- Tabs use stable ids rather than array positions, so a delayed autosave can never land in the wrong tab after you switch.
+- Upgrading from 3.1.x: your existing note (`junk-content`) becomes the first tab. The old key is left untouched as a backup.
+- If a stored snapshot is ever unreadable, Junk keeps a copy under `junk-notes-backup` instead of silently overwriting it.
+- Closing a tab is undoable: the last 20 closed tabs are remembered (**⌘⇧T**), including when you close the final tab.
+- Tab labels are built with `textContent`, never as HTML, so note text can never inject markup. Markdown preview, copy, font size and Save all act on the active tab.
+
+### Save as file
+
+**⌘S** / **Ctrl+S**, the disk icon in the footer, or **Save as file…** in Preferences. Junk opens the operating system's native Save dialog with a suggested name taken from the note's first line (`.txt`, or `.md` while Markdown preview is on). Type any name and extension you like: `.txt`, `.md`, `.log`, `.csv`, a dotfile, anything that is plain text.
+
+Why this is a Rust command (`save_text_file`) and not a browser download: Blob downloads are unreliable inside Tauri's webview, and giving the WebView direct file-system permissions would widen the security surface. Instead the page sends the text to Rust, Rust shows the dialog (parented to Junk so an always-on-top window cannot hide it) and writes the file. The WebView still has no `fs` or `dialog` permission, and there is a test for that. Notes over 50 MB are refused. Cancelling the dialog does nothing.
+
 ### Always on top
 
 Default: **enabled**. Keeps Junk's window floating above all other apps — the core scratchpad experience. Can be disabled from Preferences if you prefer the window to sit in normal z-order.
 
 This is implemented as a runtime IPC call (`set_always_on_top`) rather than a static config setting because `alwaysOnTop` in `tauri.conf.json` only sets the *initial* window level. Tauri does not watch the config for runtime changes — you must call `window.set_always_on_top()` via IPC to toggle it after the app is running.
+
+> **Fixed in 3.2.0:** Tauri v2 converts Rust argument names to camelCase on the JS side, so `always_on_top` must be sent as `alwaysOnTop`. Earlier versions sent the snake_case key, the call was rejected and the error swallowed, so the runtime toggle silently did nothing (the window only floated because of the config default). A new contract test now compares every `ipc()` call with the Rust signatures.
 
 Preference is saved to `localStorage['junk-always-top']` (`'true'` or `'false'`). Default is `true` — the toggle is only `'false'` if the user has explicitly disabled it.
 
@@ -248,7 +288,7 @@ Switching back from preview to edit mode re-populates the textarea from `localSt
 
 ### Export
 
-Copies all content to the clipboard via `navigator.clipboard.writeText()`. Available from the footer copy button and the Preferences "Copy all text" button.
+Copies the active tab's content to the clipboard via `navigator.clipboard.writeText()`. Available from the footer copy button and the Preferences "Copy all text" button.
 
 The copy button shows a checkmark SVG icon and the label "Copied!" for 1.5 seconds, then reverts to the original clipboard icon. This feedback was added in v3.0.1 — prior versions used a static clipboard SVG with no state change, making it unclear whether the copy had succeeded. The feedback is implemented as a simple `setTimeout` that swaps two inline SVG paths and reverts.
 
@@ -288,10 +328,10 @@ Junk uses the Tauri WebView's **`localStorage`** — the same storage mechanism 
 keystroke
     │
     ▼  (300 ms debounce — batches rapid typing into single writes)
-localStorage.setItem('junk-content', value)
+JunkNotes.update(notes, text) → localStorage.setItem('junk-notes-v1', JSON snapshot of all tabs)
     │
     ▼  (on next launch)
-localStorage.getItem('junk-content') → textarea.value
+JunkNotes.decode(localStorage['junk-notes-v1']) → tabs → active tab → textarea.value
 ```
 
 Storage paths (keyed to `com.paulfleury.junk`):
@@ -304,7 +344,7 @@ Storage paths (keyed to `com.paulfleury.junk`):
 
 Content survives restarts, updates, and hide/show cycles. Never synced to any server.
 
-To **clear**: open Junk, ⌘A / Ctrl+A, delete.
+To **clear** a note: open Junk, ⌘A / Ctrl+A, delete. To **keep** a note as a file, use ⌘S / Ctrl+S.
 
 <details>
 <summary><strong>Why localStorage and not a plain file?</strong></summary>
@@ -317,7 +357,7 @@ Three concrete reasons:
 
 3. **Undo history is free.** The browser's native undo stack (`⌘Z / Ctrl+Z`) operates on the textarea DOM node. That node persists across all hide/show cycles because the WebView is never recreated — you get unlimited, lossless undo for the entire session. A file-based approach would require reimplementing undo from scratch.
 
-The trade-off: content isn't accessible at a normal file path and can't be opened in another editor. That's acceptable — Junk is a transient capture buffer, not a document editor.
+The trade-off: content isn't accessible at a normal file path and can't be opened in another editor. That's acceptable — Junk is a transient capture buffer, not a document editor. When a note deserves to live somewhere permanent, **Save as file** (⌘S) exports it.
 
 </details>
 
@@ -340,7 +380,7 @@ Key differentiators: no blur-hide, no Dock/Taskbar entry, always on top, and one
 
 ## Security
 
-**Network:** The reviewed v3.1.8 source bundles its font and uses a fixed GitHub Releases endpoint for optional native update checks. Disable automatic checks in Preferences if desired. Opening a link is a separate user-initiated network action; these observations are not a guarantee about every operating-system or WebView request.
+**Network:** Junk v3.2.0 bundles its font and uses a fixed GitHub Releases endpoint for optional native update checks. Disable automatic checks in Preferences if desired. Opening a link is a separate user-initiated network action; these observations are not a guarantee about every operating-system or WebView request.
 
 **Local data:** Notes are saved in localStorage, not encrypted at rest. The reviewed update-check request does not attach note content. Clipboard export and links remain under the user's control; do not treat the scratchpad as a secret vault.
 
@@ -1665,9 +1705,9 @@ Every push to a `v*` tag triggers the GitHub Actions workflow — a 3-platform m
 
 | Runner | Artifacts |
 |---|---|
-| macOS | `Junk_3.1.8_universal.dmg` |
-| Windows | `Junk_3.1.8_x64-setup.exe` + `Junk_3.1.8_x64_en-US.msi` |
-| Ubuntu | `Junk_3.1.8_amd64.AppImage` + `Junk_3.1.8_amd64.deb` |
+| macOS | `Junk_3.2.0_universal.dmg` |
+| Windows | `Junk_3.2.0_x64-setup.exe` + `Junk_3.2.0_x64_en-US.msi` |
+| Ubuntu | `Junk_3.2.0_amd64.AppImage` + `Junk_3.2.0_amd64.deb` |
 
 All artifacts are uploaded to a GitHub Release and auto-published with a git log changelog.
 

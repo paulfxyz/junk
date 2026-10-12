@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.2.0 — 2026-10-12
+
+Three new features, one long-standing bug fix, and the first published release of the 3.1.8 hardening.
+
+### Added
+- **Auto-hide when unfocused.** After you click into another app, Junk hides itself following a delay you choose (3–120 s, default 10 s). Turn it off in Preferences to keep Junk floating forever. The countdown runs in Rust (`auto_hide.rs`) so it is not subject to WebView timer throttling, uses generation tickets so stale timers can never hide the window, and is paused while the Save dialog is open.
+- **Tabs.** A top tab bar with a new-tab (+) icon. `⌘T` / `Ctrl+T` new tab, `⌘⇧T` reopen closed tab, `⌘⇧W` close, `⌘1–9` jump, `Ctrl+Tab` / `⌘⇧[` `⌘⇧]` cycle, middle-click or × to close. Tabs are stored as one atomic snapshot (`junk-notes-v1`); your existing note becomes tab 1 and the old `junk-content` key is kept as a backup.
+- **Save as file.** `⌘S` / `Ctrl+S`, the new disk icon in the footer, or *Save as file…* in Preferences opens the native Save dialog (`tauri-plugin-dialog`, used from Rust only, no new WebView permission). Any name and extension; `.md` is suggested while Markdown preview is on.
+- New `set_auto_hide` and `save_text_file` commands.
+
+### Fixed
+- **Always on top toggle.** The page sent `always_on_top` but Tauri v2 expects `alwaysOnTop`, so the runtime call was rejected and the error swallowed. Junk only floated because of the config default. Fixed, and a new contract test compares every `ipc()` call with the Rust signatures.
+- Preferences panel rows no longer get squashed when the panel is taller than the window; the panel scrolls instead.
+
+### Changed
+- Auto-hide is on by default (10 s). Existing users who prefer the old always-floating behaviour can switch it off in Preferences.
+- Copy, Markdown preview and font size act on the active tab.
+
+### Tests
+- New unit tests for the tab store and for the JS/Rust argument contract; 5 Rust unit tests for the auto-hide policy. `npm test` now runs 50+ checks before any native build.
+
+Automated tests and a mocked-bridge browser run cover the frontend; the native Save dialog, blur timer and shortcuts still need hands-on QA on each operating system.
+
 ## 3.1.8
 
 - Replace the HTML-string Markdown parser with DOM-only rendering. Raw HTML remains text in headings, paragraphs, lists, quotes, links and code.
@@ -9,7 +32,9 @@
 - Align desktop app icons, in-app identity and theme accents with the campaign's white dotless-j mark, single peach dot, dark tile and rust/peach palette.
 - Add automated security and formatting regression tests before native builds.
 
-These changes do not provide note encryption or establish independent security certification. Native installation and OS-specific interaction checks remain distinct from automated builds and frontend tests.
+(3.1.8 was never published on its own; it ships as part of 3.2.0.)
+
+These 3.1.8 changes do not provide note encryption or establish independent security certification. Native installation and OS-specific interaction checks remain distinct from automated builds and frontend tests.
 
 ---
 

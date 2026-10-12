@@ -1,7 +1,7 @@
 [package]
 # The binary crate name. Tauri uses this as the executable name on all platforms.
 name = "junk"
-version = "3.1.8"
+version = "3.2.0"
 edition = "2021"
 # Minimum supported Rust version. 1.70 is the floor for Tauri v2.
 rust-version = "1.70"
@@ -44,6 +44,10 @@ tauri-plugin-autostart = "2"
 # from Rust rather than from the WebView's fetch(), which can be blocked by
 # the WebView's Content Security Policy in some environments.
 tauri-plugin-http = { version = "2", features = ["rustls-tls"] }
+
+# Native Save dialog for Cmd/Ctrl+S. Used only from Rust, so the WebView gets no
+# dialog or filesystem permission; the user chooses the destination natively.
+tauri-plugin-dialog = "2"
 
 # Serialisation — required for passing data across the Tauri IPC bridge.
 # Every type that crosses invoke() / emit() must implement Serialize/Deserialize.

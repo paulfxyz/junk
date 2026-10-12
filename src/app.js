@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════
-    // Junk — frontend script (v3.1.2)
+    // Junk — frontend script (v3.2.0)
     //
-    // Features (v3.1.2):
+    // Features (v3.2.0):
     //   1. Custom shortcut  — hotkey-key-input captures keydown, calls set_hotkey()
     //   2. Position memory  — saves outer_position after every drag, restores on show
     //   2b. Always on top   — default ON, toggle in prefs, persisted in localStorage
@@ -9,6 +9,9 @@
     //   4. Dark mode        — light/auto/dark buttons, respects prefers-color-scheme
     //   5. Markdown preview — lightweight inline parser, toggled via ⌘M
     //   6. Export           — copies textarea content to clipboard from prefs
+    //   7. Tabs             — one note per tab (notes.js), ⌘T new, ⌘⇧W close, ⌘1-9 jump
+    //   8. Save as file     — ⌘S asks Rust for a native Save dialog (any extension)
+    //   9. Auto-hide        — pref pushed to Rust, which owns the blur timer
     //
     // KNOWN PITFALLS:
     //   - Deep-commenting index.html to 2000+ lines causes 'Can\'t find variable:
@@ -69,6 +72,14 @@
     const btnMd           = document.getElementById('btn-md');
     const btnCopy         = document.getElementById('btn-copy');
     const btnExport       = document.getElementById('btn-export');
+    const btnSave         = document.getElementById('btn-save');
+    const btnSavePrefs    = document.getElementById('btn-save-prefs');
+    const btnNewTab       = document.getElementById('btn-new-tab');
+    const tabsEl          = document.getElementById('tabs');
+    const toggleAutoHide  = document.getElementById('toggle-auto-hide');
+    const autoHideSlider  = document.getElementById('auto-hide-slider');
+    const autoHideLabel   = document.getElementById('auto-hide-label');
+    const autoHideRow     = document.getElementById('auto-hide-delay-row');
     const hotkeyInput     = document.getElementById('hotkey-key-input');
     const hotkeyModifier  = document.getElementById('hotkey-modifier');
     const hotkeyStatus    = document.getElementById('hotkey-status');
@@ -87,25 +98,197 @@
     const KEY_WIN_SIZE    = 'junk-win-size';    // JSON {w,h}
     const KEY_ALWAYS_TOP  = 'junk-always-top';  // 'true' | 'false'
     const KEY_DIM_BLUR    = 'junk-dim-blur';    // 'true' | 'false'
+    const KEY_NOTES       = 'junk-notes-v1';    // JSON snapshot from notes.js (all tabs)
+    const KEY_NOTES_BACKUP = 'junk-notes-backup'; // last unreadable snapshot, kept for recovery
+    const KEY_AUTO_HIDE   = 'junk-auto-hide';   // 'true' | 'false' (false = always float)
+    const KEY_AUTO_HIDE_SECS = 'junk-auto-hide-seconds'; // 3..120, default 10
 
-    // ── Content persistence ──────────────────────────────────────────────────
+    // Platform label for tooltips: ⌘ on macOS, Ctrl+ elsewhere.
+    const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+    const MAX_TABS = 30;
+
+    // ── Content persistence (tabs) ───────────────────────────────────────────
+    // All notes live in ONE localStorage entry (KEY_NOTES) written atomically,
+    // so a crash can never leave tabs half-saved. notes.js owns the data rules
+    // (and is unit-tested); this file only wires it to the DOM.
+    let notes = window.JunkNotes.initial();
+
+    function persistNotes() {
+      try {
+        localStorage.setItem(KEY_NOTES, JSON.stringify(notes));
+        return true;
+      } catch (err) {
+        // Quota exceeded or storage disabled. Say so instead of pretending.
+        console.error('[notes] persist failed:', err);
+        flashStatus('not saved', true);
+        return false;
+      }
+    }
+
     function loadContent() {
-      const saved = localStorage.getItem(KEY_CONTENT);
-      if (saved !== null) editor.value = saved;
+      // Migration: pre-3.2 versions stored a single note in 'junk-content'.
+      // It becomes the first tab; the old key is left untouched as a backup.
+      const legacy = localStorage.getItem(KEY_CONTENT) || '';
+      const raw = localStorage.getItem(KEY_NOTES);
+      try {
+        notes = window.JunkNotes.decode(raw, legacy);
+      } catch (err) {
+        console.error('[notes] snapshot unreadable, starting fresh:', err);
+        try { localStorage.setItem(KEY_NOTES_BACKUP, raw || ''); } catch (_) { /* ignore */ }
+        notes = window.JunkNotes.initial(legacy);
+      }
+      showActiveTab({ focus: false });
+    }
+
+    /** Show a short message in the footer status label (autosave, copy, save…). */
+    function flashStatus(text, isError = false) {
+      saveStatus.textContent = text;
+      saveStatus.classList.toggle('error', isError);
+      saveStatus.classList.remove('saving');
+      void saveStatus.offsetWidth;   // restart the CSS fade animation
+      saveStatus.classList.add('saving');
     }
 
     let saveTimer = null;
     function saveContent() {
-      localStorage.setItem(KEY_CONTENT, editor.value);
-      saveStatus.textContent = 'saved';
-      saveStatus.classList.remove('saving');
-      void saveStatus.offsetWidth;
-      saveStatus.classList.add('saving');
+      saveTimer = null;
+      window.JunkNotes.update(notes, editor.value);
+      if (persistNotes()) flashStatus('saved');
+      updateActiveTabTitle();
       if (mdMode) renderMarkdown();
     }
     function scheduleSave() {
       if (saveTimer !== null) clearTimeout(saveTimer);
       saveTimer = setTimeout(saveContent, 300);
+    }
+    /** Write any pending keystrokes now (before switching tabs, saving, hiding). */
+    function flushSave() {
+      if (saveTimer !== null) {
+        clearTimeout(saveTimer);
+        saveContent();
+      }
+    }
+
+    // ── Tabs ─────────────────────────────────────────────────────────────────
+    // Tab chips are built with createElement/textContent only — note text is
+    // user data and must never be parsed as HTML.
+    function renderTabs() {
+      tabsEl.replaceChildren();
+      notes.tabs.forEach((tab, i) => {
+        const el = document.createElement('div');
+        el.className = 'tab' + (tab.id === notes.activeId ? ' active' : '');
+        el.dataset.id = tab.id;
+        el.setAttribute('role', 'tab');
+        el.setAttribute('aria-selected', String(tab.id === notes.activeId));
+        el.tabIndex = 0;
+
+        const title = document.createElement('span');
+        title.className = 'tab-title';
+        title.textContent = window.JunkNotes.title(tab, i);
+
+        const close = document.createElement('button');
+        close.className = 'tab-close';
+        close.type = 'button';
+        close.tabIndex = -1;
+        close.setAttribute('aria-label', 'Close tab');
+        close.title = `Close tab (${MOD}${IS_MAC ? '⇧' : 'Shift+'}W)`;
+        close.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+        el.append(title, close);
+        tabsEl.appendChild(el);
+      });
+      tabsEl.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    /** Cheap update while typing: only the active chip's label changes. */
+    function updateActiveTabTitle() {
+      const i = notes.tabs.findIndex(t => t.id === notes.activeId);
+      const el = tabsEl.querySelector('.tab.active .tab-title');
+      if (el && i >= 0) el.textContent = window.JunkNotes.title(notes.tabs[i], i);
+    }
+
+    function showActiveTab({ focus = true } = {}) {
+      editor.value = window.JunkNotes.active(notes).text;
+      renderTabs();
+      if (mdMode) renderMarkdown();
+      else if (focus) focusEditor();
+    }
+
+    function switchTab(id) {
+      if (id === notes.activeId) return;
+      flushSave();
+      window.JunkNotes.select(notes, id);
+      persistNotes();
+      showActiveTab();
+    }
+    function switchTabBy(delta) {
+      const i = notes.tabs.findIndex(t => t.id === notes.activeId);
+      const n = notes.tabs.length;
+      switchTab(notes.tabs[(i + delta + n) % n].id);
+    }
+    function newTab() {
+      if (prefsOpen) closePrefs();
+      if (notes.tabs.length >= MAX_TABS) { flashStatus('tab limit', true); return; }
+      flushSave();
+      window.JunkNotes.add(notes);
+      persistNotes();
+      showActiveTab();
+    }
+    function closeTab(id = notes.activeId) {
+      flushSave();
+      const hadText = !!notes.tabs.find(t => t.id === id)?.text;
+      window.JunkNotes.close(notes, id);
+      persistNotes();
+      showActiveTab();
+      if (hadText) flashStatus(`closed · ${MOD}${IS_MAC ? '⇧' : 'Shift+'}T reopens`);
+    }
+    function reopenTab() {
+      if (!notes.closed.length) { flashStatus('nothing to reopen'); return; }
+      flushSave();
+      window.JunkNotes.reopen(notes);
+      persistNotes();
+      showActiveTab();
+    }
+
+    tabsEl.addEventListener('click', (e) => {
+      const tabEl = e.target.closest('.tab');
+      if (!tabEl) return;
+      if (e.target.closest('.tab-close')) closeTab(tabEl.dataset.id);
+      else switchTab(tabEl.dataset.id);
+    });
+    // Middle-click closes a tab (browser convention).
+    tabsEl.addEventListener('auxclick', (e) => {
+      const tabEl = e.target.closest('.tab');
+      if (e.button === 1 && tabEl) { e.preventDefault(); closeTab(tabEl.dataset.id); }
+    });
+    tabsEl.addEventListener('keydown', (e) => {
+      const tabEl = e.target.closest('.tab');
+      if (tabEl && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        switchTab(tabEl.dataset.id);
+      }
+    });
+
+    // ── Save as file ─────────────────────────────────────────────────────────
+    // The WebView cannot write files, and Blob downloads are unreliable inside
+    // Tauri's webview. Rust shows the native Save dialog and writes the file;
+    // the user picks the name and extension (.txt, .md, .log, anything).
+    async function saveToFile() {
+      flushSave();
+      const tab = window.JunkNotes.active(notes);
+      if (!tab.text) { flashStatus('nothing to save'); return; }
+      try {
+        const path = await ipc('save_text_file', {
+          contents: tab.text,
+          suggestedName: window.JunkNotes.filename(tab, mdMode ? 'md' : 'txt'),
+        });
+        if (path) flashStatus('saved to file');
+      } catch (err) {
+        console.error('[save] failed:', err);
+        flashStatus('save failed', true);
+      }
+      setTimeout(focusEditor, 20);
     }
 
     // ── Focus ────────────────────────────────────────────────────────────────
@@ -336,7 +519,7 @@
       toggleAlwaysOnTop.checked = on;
       localStorage.setItem(KEY_ALWAYS_TOP, String(on));
       try {
-        await ipc('set_always_on_top', { always_on_top: on });
+        await ipc('set_always_on_top', { alwaysOnTop: on });
       } catch (err) {
         console.warn('[always-on-top] IPC failed:', err);
       }
@@ -415,6 +598,40 @@
       toggleDimBlur.checked = on;
       // Window starts focused — ensure full opacity
       setNativeOpacity(1.0);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Auto-hide when unfocused
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // The timer itself runs in Rust (auto_hide.rs): WebView timers can be
+    // throttled once the window is in the background, which is exactly when
+    // this one must fire. JS only stores the preference and pushes it down.
+    // 0 seconds means "always float".
+    function formatSeconds(n) {
+      if (n < 60) return `${n}s`;
+      const m = Math.floor(n / 60), r = n % 60;
+      return r ? `${m}m ${r}s` : `${m}m`;
+    }
+
+    function readAutoHideSeconds() {
+      const n = parseInt(localStorage.getItem(KEY_AUTO_HIDE_SECS), 10);
+      return n >= 3 && n <= 120 ? n : 10;
+    }
+
+    function syncAutoHide() {
+      const on = toggleAutoHide.checked;
+      const secs = parseInt(autoHideSlider.value, 10) || 10;
+      autoHideLabel.textContent = formatSeconds(secs);
+      autoHideRow.classList.toggle('is-disabled', !on);
+      autoHideSlider.disabled = !on;
+      ipc('set_auto_hide', { seconds: on ? secs : 0 }).catch(() => {});
+    }
+
+    function loadAutoHide() {
+      toggleAutoHide.checked = localStorage.getItem(KEY_AUTO_HIDE) !== 'false'; // default ON
+      autoHideSlider.value = String(readAutoHideSeconds());
+      syncAutoHide();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -594,10 +811,7 @@
           sourceBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
           sourceBtn.title = 'Saved!';
           // Also flash the save-status label
-          saveStatus.textContent = 'copied';
-          saveStatus.classList.remove('saving');
-          void saveStatus.offsetWidth;
-          saveStatus.classList.add('saving');
+          flashStatus('copied');
         } else {
           // For text buttons (prefs export): swap text
           sourceBtn.textContent = 'Copied!';
@@ -730,7 +944,7 @@
         // Re-assert always-on-top on every show — macOS resets CGWindowLevel
         // on orderOut → makeKeyAndOrderFront (hide/show cycle).
         const alwaysOn = localStorage.getItem(KEY_ALWAYS_TOP) !== 'false';
-        ipc('set_always_on_top', { always_on_top: alwaysOn }).catch(() => {});
+        ipc('set_always_on_top', { alwaysOnTop: alwaysOn }).catch(() => {});
         setTimeout(focusEditor, 20);
       });
 
@@ -760,7 +974,7 @@
     (function registerDragListener() {
       const INTERACTIVE = [
         'textarea','input','button','select','a','label',
-        '[contenteditable]','.prefs-panel','.editor-dim',
+        '[contenteditable]','.prefs-panel','.editor-dim','.tab',
       ].join(', ');
 
       if (!windowEl) return;
@@ -826,6 +1040,27 @@
         setMdMode(!mdMode);
         return;
       }
+
+      // Tabs and save. Matched on e.code so Shift/layouts do not change the key.
+      //   ⌘T new · ⌘⇧T reopen · ⌘⇧W close · ⌘S save · ⌘1-9 jump
+      //   ⌘⇧[ / ⌘⇧] or Ctrl+Tab / Ctrl+Shift+Tab to cycle
+      // (⌘W is not used: the default macOS menu maps it to "Close Window".)
+      const mod = e.metaKey || e.ctrlKey;
+      if (e.ctrlKey && e.code === 'Tab') {
+        e.preventDefault();
+        switchTabBy(e.shiftKey ? -1 : 1);
+        return;
+      }
+      if (!mod || e.altKey) return;
+      if (e.code === 'KeyT') { e.preventDefault(); e.shiftKey ? reopenTab() : newTab(); return; }
+      if (e.code === 'KeyW' && e.shiftKey) { e.preventDefault(); closeTab(); return; }
+      if (e.code === 'KeyS' && !e.shiftKey) { e.preventDefault(); saveToFile(); return; }
+      if (e.shiftKey && e.code === 'BracketRight') { e.preventDefault(); switchTabBy(1); return; }
+      if (e.shiftKey && e.code === 'BracketLeft')  { e.preventDefault(); switchTabBy(-1); return; }
+      if (!e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+        const tab = notes.tabs[Number(e.code.slice(5)) - 1];
+        if (tab) { e.preventDefault(); switchTab(tab.id); }
+      }
     });
 
     // ── Paste handler ────────────────────────────────────────────────────────
@@ -867,6 +1102,23 @@
     btnMd.addEventListener('click', () => setMdMode(!mdMode));
     btnCopy.addEventListener('click', () => copyAllToClipboard(btnCopy));
     btnExport.addEventListener('click', () => copyAllToClipboard(btnExport));
+    btnSave.addEventListener('click', saveToFile);
+    btnSavePrefs.addEventListener('click', () => { closePrefs(); saveToFile(); });
+    btnNewTab.addEventListener('click', newTab);
+    toggleAutoHide.addEventListener('change', () => {
+      localStorage.setItem(KEY_AUTO_HIDE, String(toggleAutoHide.checked));
+      syncAutoHide();
+    });
+    // 'input' updates the label live; 'change' (on release) pushes to Rust once.
+    autoHideSlider.addEventListener('input', () => {
+      autoHideLabel.textContent = formatSeconds(parseInt(autoHideSlider.value, 10));
+    });
+    autoHideSlider.addEventListener('change', () => {
+      localStorage.setItem(KEY_AUTO_HIDE_SECS, autoHideSlider.value);
+      syncAutoHide();
+    });
+    btnNewTab.title = `New tab (${MOD}T)`;
+    btnSave.title = `Save as file (${MOD}S)`;
     checkUpdateBtn.addEventListener('click', () => checkForUpdate({ silent: false }));
 
     // ── Startup sequence ─────────────────────────────────────────────────────
@@ -876,6 +1128,7 @@
     loadMdMode();
     loadAlwaysOnTop();
     loadDimBlur();
+    loadAutoHide();
     initHotkeyDisplay();
     setupTauriEvents();
     maybeAutoCheckOnStartup();
@@ -884,4 +1137,4 @@
     // Restore custom hotkey (re-registers in Rust if user had changed it)
     restoreHotkey().catch(() => {});
 
-    console.log('[junk] v3.1.8 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');
+    console.log('[junk] v3.2.0 loaded. IPC bridge:', getInvoke() ? 'OK' : 'NOT FOUND');

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!--
-  Junk — frontend (v3.1.8)
+  Junk — frontend (v3.2.0)
   ═══════════════════════════════════════════════════════════════════════════════
 
-  Features (current as of v3.0.9):
+  Features (current as of v3.2.0):
     1. Custom shortcut     — change ⌘J to any key via Preferences
     2. Window position     — drag position + size remembered across sessions
     3. Font size           — 14–28px, saved in localStorage
@@ -11,6 +11,9 @@
     5. Markdown preview    — toggle rendered MD vs raw text
     6. Plain-text export   — one-click copy all content to clipboard
     7. Always on top       — float above all windows (default ON, toggleable)
+    8. Tabs                — one plain-text note per tab, ⌘T / Ctrl+T, kept locally
+    9. Save as file        — ⌘S / Ctrl+S opens the native Save dialog (any extension)
+   10. Auto-hide           — hide after N seconds unfocused (default 10 s, or always float)
 
   Architecture: bundled static HTML, CSS and JavaScript, with no frontend build step.
 
@@ -49,6 +52,17 @@
     <!-- Dim overlay — clicking outside prefs closes it -->
     <div id="editor-dim"></div>
 
+    <!-- Tab bar: one plain-text note per tab, "+" opens a new one (⌘T / Ctrl+T) -->
+    <div class="tabbar" id="tabbar">
+      <div class="tabs" id="tabs" role="tablist" aria-label="Notes"></div>
+      <button class="icon-btn" id="btn-new-tab" title="New tab (⌘T)" aria-label="New tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Main textarea -->
     <textarea
       id="editor"
@@ -79,7 +93,15 @@
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
           </svg>
         </button>
-        <span id="save-status">saved</span>
+        <!-- Save as file (native Save dialog; any name or extension) -->
+        <button class="icon-btn" id="btn-save" title="Save as file (⌘S)" aria-label="Save note as a file">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+        </button>
+        <span id="save-status" role="status" aria-live="polite">saved</span>
       </div>
 
       <div class="footer-right">
@@ -188,6 +210,31 @@
             </label>
           </div>
 
+          <!-- Auto-hide when unfocused -->
+          <div class="prefs-row">
+            <span class="prefs-row-label">
+              Auto-hide when unfocused
+              <span class="prefs-row-hint">Hide Junk after it sits in the background. Off keeps it floating</span>
+            </span>
+            <label class="toggle-wrap">
+              <input type="checkbox" id="toggle-auto-hide" checked />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="prefs-row prefs-row--stack" id="auto-hide-delay-row">
+            <span class="prefs-row-label">
+              Hide after
+              <span class="prefs-row-hint">Seconds in the background before Junk hides</span>
+            </span>
+            <div class="font-size-row prefs-slider-row">
+              <span class="slider-end">3</span>
+              <input type="range" class="prefs-slider" id="auto-hide-slider" min="3" max="120" step="1" value="10" aria-label="Seconds before auto-hide" />
+              <span class="slider-end">120</span>
+              <span class="prefs-slider-value" id="auto-hide-label">10s</span>
+            </div>
+          </div>
+
           <!-- Launch at login -->
           <div class="prefs-row">
             <span class="prefs-row-label">
@@ -217,6 +264,7 @@
         <!-- Actions row -->
         <div class="prefs-actions">
           <button class="action-btn" id="btn-export">Copy all text</button>
+          <button class="action-btn" id="btn-save-prefs">Save as file…</button>
           <button class="action-btn" id="check-update-btn">Check for updates</button>
         </div>
 
@@ -232,7 +280,7 @@
             &nbsp;·&nbsp;
             To fully quit: Activity Monitor → Junk → quit
           </span>
-          <span id="current-version">v3.1.8</span>
+          <span id="current-version">v3.2.0</span>
         </div>
 
       </div>
@@ -242,6 +290,7 @@
   </div><!-- end .window -->
 
   <script src="markdown.js"></script>
+  <script src="notes.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

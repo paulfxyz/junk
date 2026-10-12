@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — Junk v3.0.9
+# ARCHITECTURE.md — Junk v3.2.0
 
 > **Junk** — the flying scratchpad. Press `⌘J` / `Ctrl+J` anywhere, type, press `Esc`. No friction.
 >
@@ -32,6 +32,10 @@ This document is written for a new contributor who wants to understand every cor
    - [4.13 tauri.conf.json key settings](#413-tauriconfjson-key-settings)
    - [4.14 Always on top](#414-always-on-top)
    - [4.15 The JavaScriptCore large-module bug](#415-the-javascriptcore-large-module-bug)
+   - [4.16 Auto-hide when unfocused](#416-auto-hide-when-unfocused)
+   - [4.17 Tabs](#417-tabs)
+   - [4.18 Save as file](#418-save-as-file)
+   - [4.19 The JS/Rust argument-name contract](#419-the-jsrust-argument-name-contract)
 5. [Rust Backend Deep Dive](#5-rust-backend-deep-dive)
    - [5.1 State management](#51-state-management)
    - [5.2 IPC command reference](#52-ipc-command-reference)
@@ -71,10 +75,17 @@ The design goals that drove every technical decision:
 ```
 junk-repo/
 ├── src/
-│   └── index.html              # Entire frontend: HTML + CSS + JS (~1,567 lines)
+│   ├── index.html              # Markup only (no inline scripts: the CSP forbids them)
+│   ├── app.js                  # UI wiring, prefs, shortcuts, IPC calls (ES module)
+│   ├── app.css                 # Theme tokens + all styling
+│   ├── markdown.js             # DOM-only Markdown renderer (unit-tested)
+│   ├── notes.js                # Tab store: pure data logic, no DOM (unit-tested)
+│   └── fonts/, brand/          # Bundled Space Grotesk + the Junk mark
+├── tests/                      # node --test: markdown, notes, IPC contract, CSP checks
 ├── src-tauri/
 │   ├── src/
-│   │   └── main.rs             # All Rust backend (~770 lines)
+│   │   ├── main.rs             # Rust backend: commands, shortcuts, window events
+│   │   └── auto_hide.rs        # Blur-timer policy (generation tickets, unit-tested)
 │   ├── Cargo.toml              # Dependencies, version, build profiles
 │   ├── tauri.conf.json         # Window config, bundle settings, capabilities
 │   ├── capabilities/
@@ -677,6 +688,51 @@ Default is ON (any localStorage value other than the string `'false'` enables it
 
 **Line count budget:** Stay under ~1700 lines in `index.html`. The confirmed safe version is 1567 lines (commit `4a18c56`). The confirmed broken version is 2067 lines (commit `3b7bef4`).
 
+### 4.16 Auto-hide when unfocused
+
+**Goal:** Junk should not float forever by default, but power users must be able to keep it floating.
+
+**Design:** the countdown lives in Rust (`src-tauri/src/auto_hide.rs` + `schedule_auto_hide()` in `main.rs`), not in JS. A background WebView can have its timers throttled, and "the window is in the background" is precisely the situation this timer exists for.
+
+1. `Focused(false)` → `schedule_auto_hide()` reads the configured seconds (`0` = never) and takes a **ticket**: an incrementing generation number.
+2. A short-lived thread sleeps, then asks the main thread to run `can_hide(ticket)`. It hides only if the ticket is still current, the delay is still non-zero, the window is not focused and no native dialog is open. It also re-checks `is_visible()` / `is_focused()` on the main thread.
+3. Anything that makes the countdown irrelevant simply bumps the generation: focus returning, `show_and_focus()`, a settings change, or opening the Save dialog. The sleeping thread wakes up, sees a stale ticket and does nothing. No cancellation handles, no locks held across a sleep.
+
+**Why not `setTimeout`?** Throttling, as above. **Why not kill the thread?** Rust threads cannot be cancelled safely; tickets are the idiomatic alternative.
+
+**Why pause during the Save dialog?** A native dialog takes focus from Junk, which looks exactly like "the user clicked away". Without `dialog_open`, the window could vanish from under an open dialog.
+
+JS owns the preference (`junk-auto-hide`, `junk-auto-hide-seconds`) and pushes it down with `set_auto_hide` on startup and after each change. Rust's default (10 s) matches the JS default, so there is no unprotected gap before the WebView loads.
+
+### 4.17 Tabs
+
+`src/notes.js` is a pure module: `initial / decode / add / select / close / reopen / update / title / filename`. It has no DOM access, so `tests/notes.test.cjs` runs it in plain Node. `app.js` renders it.
+
+- **Stable ids, not indexes.** A debounced save always writes to `notes.activeId` at call time, and `flushSave()` runs before every tab change, so a pending save can never land in the wrong tab.
+- **One atomic snapshot.** All tabs go into a single `localStorage` key. There is no state where tab 2 is saved and tab 3 is not.
+- **Validated on load.** `decode()` whitelists fields (`id`, `text`) and rejects malformed or duplicate-id snapshots; on failure `app.js` stores the raw string under `junk-notes-backup` and starts from the legacy note instead of overwriting data.
+- **Undo for closing.** Closed tabs go on a bounded stack (20). Closing the last tab leaves a blank tab, and the old text stays reopenable.
+- **DOM safety.** Tab chips use `textContent`. Note text is never interpreted as HTML.
+- **Shortcut choice.** `⌘W` is deliberately not used: the default macOS menu binds it to *Close Window* before the WebView sees the key, so it would hide Junk. Close is `⌘⇧W` everywhere.
+- **Dragging.** The tab bar background drags the window like the rest of the chrome; `.tab` is in the drag-ignore list so clicks on tabs are clicks.
+
+### 4.18 Save as file
+
+The WebView cannot write arbitrary files, `<a download>` is unreliable in Tauri's webview, and granting the page file-system permissions would widen the attack surface. So saving is a Rust command:
+
+1. JS flushes pending edits, then calls `save_text_file({ contents, suggestedName })`.
+2. Rust sets `dialog_open` (pausing auto-hide), shows the native Save dialog via `tauri-plugin-dialog`, **parented to the main window**. Without a parent, an always-on-top Junk window can cover an unowned dialog on Windows and Linux; on macOS the dialog becomes a sheet.
+3. The command is `async` because the plugin's `blocking_save_file()` must not run on the main thread (sync commands do).
+4. Rust writes the bytes with `std::fs::write` and returns the chosen path, or `None` if cancelled.
+
+The plugin is used only from Rust: `capabilities/default.json` gains no `dialog:` or `fs:` permission, and `tests/ipc-contract.test.cjs` asserts that. Content is capped at 50 MB. The suggested name is the first line of the note, stripped of characters Windows rejects; the extension is `.txt`, or `.md` while Markdown preview is on, and the user can type any extension.
+
+### 4.19 The JS/Rust argument-name contract
+
+Tauri v2 converts Rust argument names to **camelCase** for the JS caller (`always_on_top` → `alwaysOnTop`, `suggested_name` → `suggestedName`). A snake_case key is rejected with "missing required key", and `app.js` deliberately swallows IPC errors in several places so the UI never crashes on a missing native feature. The result, from v3.0.9 to v3.1.x, was a Preferences toggle that appeared to work but never reached Rust.
+
+`tests/ipc-contract.test.cjs` parses every `#[tauri::command]` signature in `main.rs` (ignoring injected `AppHandle`, `WebviewWindow`, `State`), camel-cases the names, and compares them with every `ipc('command', { … })` call in `app.js`. It also checks each command is in `generate_handler!`. Add a command and the test tells you if the two sides disagree.
+
 ---
 
 ## 5. Rust Backend Deep Dive
@@ -714,7 +770,9 @@ All commands are registered in `tauri::generate_handler![]`:
 | `get_window_size` | — | `Result<WindowSize, String>` | `{ width: u32, height: u32 }` physical |
 | `set_window_size` | `width: u32, height: u32` | `Result<(), String>` | Clamped to `300–3000 × 200–2000` |
 | `set_hotkey` | `key: String` | `Result<(), String>` | Key = `KeyboardEvent.code` string |
-| `set_always_on_top` | `always_on_top: bool` | `Result<(), String>` | Enables or disables floating above all windows. Called on startup and on Preferences toggle. |
+| `set_auto_hide` | `seconds: u64` | `Result<u64, String>` | `0` = always float; otherwise clamped to 3–300 s. Returns the stored value. Cancels any running countdown. |
+| `save_text_file` | `contents: String, suggested_name: String` (JS: `suggestedName`) | `Result<Option<String>, String>` | Native Save dialog + write. `None` = user cancelled. Async: blocking dialogs must not run on the main thread. |
+| `set_always_on_top` | `always_on_top: bool` (JS: `alwaysOnTop`) | `Result<(), String>` | Enables or disables floating above all windows. Called on startup and on Preferences toggle. |
 
 All commands return `Result<T, String>`. Errors surface to JS as rejected promises. This convention is enforced throughout — no `unwrap()` in IPC command bodies.
 
@@ -830,7 +888,11 @@ onFocus()
 
 | Key | Type | Description |
 |---|---|---|
-| `junk-content` | `string` | Scratchpad text content |
+| `junk-notes-v1` | JSON `{version, activeId, tabs:[{id,text}], closed:[…]}` | Every tab, written atomically. Replaces `junk-content` in 3.2.0 |
+| `junk-notes-backup` | string | Raw copy of a snapshot that failed validation (kept for manual recovery) |
+| `junk-content` | `string` | Legacy single note (≤ 3.1.x). Read once to seed tab 1, never deleted |
+| `junk-auto-hide` | `'true'` / `'false'` | Auto-hide when unfocused. Default on; `'false'` = always float |
+| `junk-auto-hide-seconds` | `'3'`–`'120'` | Delay before auto-hide. Default `'10'` |
 | `junk-auto-update` | `'true'` / `'false'` | Whether to auto-check for updates on launch |
 | `junk-font-size` | number string (`'14'`–`'28'`) | Font size in px |
 | `junk-theme` | `'light'` / `'auto'` / `'dark'` | Appearance mode |
@@ -849,6 +911,9 @@ All keys are prefixed with `junk-` to avoid collisions if the WebView origin eve
 | Event name | Emitted by | Payload | Subscriber |
 |---|---|---|---|
 | `tauri://focus` | Tauri runtime (built-in) | `null` | `window.__TAURI__.event.listen` — triggers fly-in + position/size restore |
+| `junk://show` | `show_and_focus()` | `null` | Hidden→visible only: fly-in, position restore |
+| `junk://blur` | `WindowEvent::Focused(false)` | `null` | Dim to 50 %; Rust also starts the auto-hide countdown |
+| `junk://focus-change` | `WindowEvent::Focused(true)` | `null` | Restore full opacity; Rust cancels the countdown |
 | `open-prefs` | `open_prefs` command + `register_prefs_shortcut` callback | `null` | `window.__TAURI__.event.listen` — slides preferences panel up |
 
 **`tauri://focus` is a Tauri built-in event.** It fires every time the window receives focus — including the first show after launch, every hotkey trigger, and every click on the window from another app. JS handles it identically every time: animate in, restore position, focus the editor.
@@ -1079,6 +1144,9 @@ The pref key `junk-dim-blur` in `localStorage` (default: `"true"`) controls whet
 
 | Version | Key change |
 |---|---|
+| v3.2.0 | Tabs (⌘T), save as file (⌘S, native dialog), configurable auto-hide timer (default 10 s), `alwaysOnTop` IPC fix, IPC contract test; includes the 3.1.8 hardening (DOM-only Markdown, CSP, bundled font) |
+| v3.1.8 | Security hardening candidate: DOM-only Markdown, CSP, bundled font, tests, new brand mark (never published on its own) |
+| v3.1.7 | `junk://show` event: fly-in plays only on hidden→visible |
 | v3.1.6 | Fix: dim-on-blur flash — `show_and_focus()` resets opacity to 1.0 before `show()` |
 | v3.1.5 | Dim-on-blur extended to Windows (`SetLayeredWindowAttributes`) and Linux (CSS inline opacity) |
 | v3.1.4 | Dim-on-blur: `NSWindow.setAlphaValue` via objc2 — correct macOS implementation |

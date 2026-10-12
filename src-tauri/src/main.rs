@@ -78,8 +78,14 @@
 // Silence the console window that Windows would normally open for a GUI app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod auto_hide;
+
+use std::sync::atomic::Ordering;
 use std::sync::Mutex;
+use std::time::Duration;
+use auto_hide::AutoHide;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -140,6 +146,91 @@ struct WindowSize {
 }
 
 // ── IPC commands ──────────────────────────────────────────────────────────────
+
+/// Configure how long Junk may stay in the background before it hides.
+///
+/// `seconds == 0` means "always float" (never auto-hide). Values are clamped to
+/// 3-300 s so a corrupted preference cannot create an instant-hide loop. The
+/// timer lives in Rust because WebView timers can be throttled once the window
+/// is unfocused or occluded.
+#[tauri::command]
+fn set_auto_hide(app: AppHandle, seconds: u64) -> Result<u64, String> {
+    let value = if seconds == 0 { 0 } else { seconds.clamp(3, 300) };
+    let state = app.state::<AutoHide>();
+    state.seconds.store(value, Ordering::SeqCst);
+    // Changing the preference invalidates any timer started with the old one.
+    state.cancel();
+    Ok(value)
+}
+
+/// Save the active note through the operating system's native Save dialog.
+///
+/// Returns `Ok(None)` when the user cancels. The user chooses the final name
+/// and extension, so `.txt`, `.md`, `.log` or any raw text format works. The
+/// dialog is parented to Junk, otherwise an always-on-top window can cover an
+/// unowned dialog on Windows/Linux. Auto-hide is suspended while it is open.
+#[tauri::command]
+async fn save_text_file(
+    app: AppHandle,
+    contents: String,
+    suggested_name: String,
+) -> Result<Option<String>, String> {
+    const MAX_BYTES: usize = 50 * 1024 * 1024;
+    if contents.len() > MAX_BYTES {
+        return Err("Note is larger than 50 MB".into());
+    }
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    let state = app.state::<AutoHide>();
+    state.dialog_open.store(true, Ordering::SeqCst);
+    state.cancel();
+    let picked = app
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .set_file_name(suggested_name)
+        .blocking_save_file();
+    state.dialog_open.store(false, Ordering::SeqCst);
+
+    let Some(file) = picked else { return Ok(None) };
+    let path = file.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, contents.as_bytes())
+        .map_err(|e| format!("Could not save file: {e}"))?;
+    if let Err(e) = window.set_focus() {
+        log::warn!("save_text_file: set_focus failed: {e}");
+    }
+    Ok(Some(path.display().to_string()))
+}
+
+/// Start the native "hide after N seconds in the background" timer.
+fn schedule_auto_hide(app: &AppHandle) {
+    let state = app.state::<AutoHide>();
+    state.focused.store(false, Ordering::SeqCst);
+    let seconds = state.seconds.load(Ordering::SeqCst);
+    if seconds == 0 || state.dialog_open.load(Ordering::SeqCst) {
+        state.cancel();
+        return;
+    }
+    let ticket = state.ticket();
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(seconds));
+        let main_app = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let state = main_app.state::<AutoHide>();
+            let Some(window) = main_app.get_webview_window("main") else { return };
+            if state.can_hide(ticket)
+                && matches!(window.is_visible(), Ok(true))
+                && !matches!(window.is_focused(), Ok(true))
+            {
+                if let Err(e) = window.hide() {
+                    log::warn!("auto-hide failed: {e}");
+                }
+            }
+        });
+    });
+}
 
 /// Hide the main scratchpad window.
 ///
@@ -635,6 +726,8 @@ fn toggle_window(window: &WebviewWindow) {
 ///     which is now a no-op (idempotent — already 1.0).
 ///   - If the user has dim-on-blur OFF, the opacity was already 1.0 — also a no-op.
 fn show_and_focus(window: &WebviewWindow) {
+    // A manual summon always beats a pending background timer.
+    window.app_handle().state::<AutoHide>().cancel();
     // Reset opacity before making the window visible — prevents flash.
     // See doc comment above for the full rationale.
     if let Err(e) = set_window_opacity_raw(window, 1.0) {
@@ -922,6 +1015,7 @@ fn main() {
         // Store the currently-registered toggle shortcut so set_hotkey() can
         // unregister it before registering the new one.
         .manage(CurrentShortcut(Mutex::new(default_shortcut)))
+        .manage(AutoHide::default())
         // ── Plugins ───────────────────────────────────────────────────────────
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -929,6 +1023,7 @@ fn main() {
             None::<Vec<&str>>,
         ))
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         // ── Setup hook ────────────────────────────────────────────────────────
         .setup(|app| {
             let handle = app.handle();
@@ -1002,6 +1097,8 @@ fn main() {
         // ── IPC commands ──────────────────────────────────────────────────────
         .invoke_handler(tauri::generate_handler![
             hide_window,
+            set_auto_hide,
+            save_text_file,
             start_dragging,
             open_prefs,
             get_prefs,
@@ -1054,6 +1151,13 @@ fn main() {
                 event: tauri::WindowEvent::Focused(focused),
                 ..
             } if label == "main" => {
+                if focused {
+                    let state = app.state::<AutoHide>();
+                    state.focused.store(true, Ordering::SeqCst);
+                    state.cancel();
+                } else {
+                    schedule_auto_hide(app);
+                }
                 if let Some(window) = app.get_webview_window("main") {
                     let event_name = if focused { "junk://focus-change" } else { "junk://blur" };
                     if let Err(e) = window.emit(event_name, ()) {
